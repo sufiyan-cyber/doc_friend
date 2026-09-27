@@ -1,0 +1,2638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OperatorOS — Voice-First AI Business Operator (EmberGround AI Hackathon 2026)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            background: '#FAFAF8',
+            foreground: '#1A1A1A',
+            muted: '#F5F3F0',
+            'muted-foreground': '#6B6B6B',
+            accent: '#B8860B',
+            'accent-secondary': '#D4A84B',
+            'accent-foreground': '#FFFFFF',
+            border: '#E8E4DF',
+            'border-hover': '#D5CFC7',
+            card: '#FFFFFF',
+            ring: '#B8860B'
+          },
+          fontFamily: {
+            display: ['"Playfair Display"', 'Georgia', 'serif'],
+            sans: ['"Source Sans 3"', 'system-ui', 'sans-serif'],
+            mono: ['"IBM Plex Mono"', 'monospace']
+          },
+          boxShadow: {
+            sm: '0 1px 2px rgba(26, 26, 26, 0.04)',
+            md: '0 4px 12px rgba(26, 26, 26, 0.06)',
+            lg: '0 8px 24px rgba(26, 26, 26, 0.08)',
+            accent: '0 4px 14px rgba(184, 134, 11, 0.22)'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
+
+    :root {
+      --background: #FAFAF8;
+      --foreground: #1A1A1A;
+      --muted: #F5F3F0;
+      --muted-foreground: #6B6B6B;
+      --accent: #B8860B;
+      --accent-secondary: #D4A84B;
+      --accent-foreground: #FFFFFF;
+      --accent-muted: rgba(184, 134, 11, 0.06);
+      --border: #E8E4DF;
+      --border-hover: #D5CFC7;
+      --card: #FFFFFF;
+      --ring: #B8860B;
+    }
+
+    ::selection {
+      background-color: rgba(184, 134, 11, 0.18);
+      color: #1A1A1A;
+    }
+
+    body {
+      font-family: "Source Sans 3", system-ui, sans-serif;
+      background-color: var(--background);
+      color: var(--foreground);
+      font-size: 1rem;
+      line-height: 1.6;
+      letter-spacing: 0.01em;
+      overflow-x: hidden;
+    }
+
+    h1, h2, h3, h4, .font-display {
+      font-family: "Playfair Display", Georgia, serif;
+    }
+
+    pre, code, .font-mono {
+      font-family: "IBM Plex Mono", monospace;
+    }
+
+    .small-caps {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.7rem;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .paper-texture {
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='paper'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23paper)' opacity='0.025'/%3E%3C/svg%3E");
+    }
+
+    .ambient-gold-glow {
+      background: radial-gradient(
+        circle at 50% 25%,
+        rgba(184, 134, 11, 0.06) 0%,
+        rgba(212, 168, 75, 0.02) 45%,
+        transparent 75%
+      );
+    }
+
+    .voice-wave span {
+      display: inline-block;
+      width: 2.5px;
+      height: 14px;
+      margin: 0 1.5px;
+      background: var(--accent);
+      border-radius: 1px;
+      animation: serif-wave 0.9s infinite ease-in-out;
+    }
+    .voice-wave span:nth-child(2) { animation-delay: 0.15s; }
+    .voice-wave span:nth-child(3) { animation-delay: 0.3s; }
+    .voice-wave span:nth-child(4) { animation-delay: 0.45s; }
+    @keyframes serif-wave {
+      0%, 100% { transform: scaleY(0.35); opacity: 0.55; }
+      50% { transform: scaleY(1.25); opacity: 1; }
+    }
+
+    .serif-focus:focus-visible {
+      outline: none !important;
+      box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring) !important;
+    }
+
+    /* Custom subtle scrollbar for execution panel */
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: #F5F3F0;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #D5CFC7;
+      border-radius: 3px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+      background: #B8860B;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col paper-texture">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // =========================================================================
+    // REUSABLE SERIF DESIGN SYSTEM PRIMITIVES
+    // =========================================================================
+
+    function SectionLabel({ children, className = "mb-4" }) {
+      return (
+        <div className={`flex items-center gap-3 ${className}`}>
+          <span className="h-px flex-1 bg-[#E8E4DF]" aria-hidden="true" />
+          <span className="small-caps text-[#B8860B] shrink-0">
+            {children}
+          </span>
+          <span className="h-px flex-1 bg-[#E8E4DF]" aria-hidden="true" />
+        </div>
+      );
+    }
+
+    function SerifButton({
+      variant = "primary",
+      size = "md",
+      active = false,
+      disabled = false,
+      onClick,
+      children,
+      className = "",
+      title = "",
+      type = "button"
+    }) {
+      const sizeClasses = {
+        xs: "min-h-[34px] px-3 py-1 text-xs",
+        sm: "min-h-[40px] px-3.5 py-1.5 text-xs",
+        md: "min-h-[44px] px-5 py-2 text-sm",
+        lg: "min-h-[48px] px-6 py-2.5 text-base"
+      };
+
+      const variantClasses = {
+        primary:
+          "bg-[#B8860B] text-white font-semibold tracking-[0.02em] rounded-md shadow-sm hover:bg-[#D4A84B] hover:shadow-accent hover:-translate-y-0.5 active:translate-y-0",
+        dark:
+          "bg-[#1A1A1A] text-white font-semibold tracking-[0.02em] rounded-md shadow-sm hover:bg-[#333333] hover:-translate-y-0.5 active:translate-y-0",
+        secondary: active
+          ? "bg-[#F5F3F0] border border-[#B8860B] text-[#B8860B] font-semibold rounded-md shadow-sm"
+          : "bg-transparent border border-[#1A1A1A] text-[#1A1A1A] font-medium rounded-md hover:bg-[#F5F3F0] hover:border-[#B8860B] hover:text-[#B8860B]",
+        outline: active
+          ? "bg-[rgba(184,134,11,0.1)] border border-[#B8860B] text-[#B8860B] font-semibold rounded-md"
+          : "bg-white border border-[#E8E4DF] text-[#1A1A1A] font-medium rounded-md shadow-sm hover:bg-[#F5F3F0]/70 hover:border-[#B8860B] hover:text-[#B8860B]",
+        ghost:
+          "bg-transparent text-[#6B6B6B] hover:text-[#1A1A1A] hover:underline decoration-[#B8860B] underline-offset-4 px-2"
+      };
+
+      return (
+        <button
+          type={type}
+          onClick={onClick}
+          disabled={disabled}
+          title={title}
+          className={`serif-focus touch-manipulation inline-flex items-center justify-center transition-all duration-200 ease-out select-none ${
+            sizeClasses[size] || sizeClasses.md
+          } ${variantClasses[variant] || variantClasses.primary} ${
+            disabled ? "opacity-50 cursor-not-allowed pointer-events-none" : "cursor-pointer"
+          } ${className}`}>
+          {children}
+        </button>
+      );
+    }
+
+    function SerifCard({
+      accentTop = false,
+      featured = false,
+      elevated = false,
+      label = null,
+      title = null,
+      subtitle = null,
+      headerRight = null,
+      className = "",
+      bodyClassName = "p-5 sm:p-6",
+      children
+    }) {
+      const surfaceClass = featured
+        ? "bg-[rgba(184,134,11,0.06)] border-2 border-[#B8860B] shadow-md"
+        : accentTop
+        ? `bg-white border border-[#E8E4DF] border-t-2 border-t-[#B8860B] ${elevated ? "shadow-md" : "shadow-sm"}`
+        : `bg-white border border-[#E8E4DF] ${elevated ? "shadow-md" : "shadow-sm"}`;
+
+      return (
+        <section className={`rounded-lg flex flex-col ${surfaceClass} ${className}`}>
+          {(label || title || headerRight) && (
+            <header className="px-5 sm:px-6 py-4 border-b border-[#E8E4DF] flex flex-wrap items-center justify-between gap-3 bg-[#FAFAF8]/60">
+              <div className="min-w-0">
+                {label && (
+                  <span className="small-caps text-[#B8860B] block mb-0.5">
+                    {label}
+                  </span>
+                )}
+                {title && (
+                  <h2 className="font-display text-lg sm:text-xl font-semibold text-[#1A1A1A] leading-snug truncate">
+                    {title}
+                  </h2>
+                )}
+                {subtitle && (
+                  <p className="text-xs text-[#6B6B6B] mt-0.5">{subtitle}</p>
+                )}
+              </div>
+              {headerRight && <div className="shrink-0 flex items-center gap-2">{headerRight}</div>}
+            </header>
+          )}
+          <div className={`flex-1 ${bodyClassName}`}>
+            {children}
+          </div>
+        </section>
+      );
+    }
+
+    function GoldPullQuote({ quote, attribution = "OperatorOS Spoken Response", onReplay = null, compact = false }) {
+      return (
+        <blockquote className={`relative bg-[#FAFAF8] border border-[#E8E4DF] border-l-4 border-l-[#B8860B] rounded-r-lg ${compact ? "p-4" : "p-5"} shadow-sm`}>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="small-caps text-[#B8860B] flex items-center gap-1.5">
+                <i className="fa-solid fa-volume-high text-[11px]"></i>
+                <span>{attribution}</span>
+              </span>
+              {onReplay && (
+                <button
+                  onClick={onReplay}
+                  className="serif-focus text-xs font-mono text-[#6B6B6B] hover:text-[#B8860B] flex items-center gap-1 px-2 py-0.5 rounded border border-[#E8E4DF] bg-white">
+                  <i className="fa-solid fa-rotate-right text-[10px]"></i>
+                  <span>Replay</span>
+                </button>
+              )}
+            </div>
+            <p className={`font-display italic ${compact ? "text-base" : "text-lg"} text-[#1A1A1A] leading-relaxed`}>
+              &ldquo;{quote}&rdquo;
+            </p>
+          </div>
+        </blockquote>
+      );
+    }
+
+    // =========================================================================
+    // WEB AUDIO SYNTHESIZER & SPEECH HELPERS (UNCHANGED LOGIC)
+    // =========================================================================
+    const audioCtxRef = { current: null };
+
+    function getAudioContext() {
+      if (!audioCtxRef.current) {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) audioCtxRef.current = new AudioCtx();
+      }
+      if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+        audioCtxRef.current.resume();
+      }
+      return audioCtxRef.current;
+    }
+
+    function playChime(type) {
+      try {
+        const ctx = getAudioContext();
+        if (!ctx) return;
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        if (type === 'listen') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(520, now);
+          osc.frequency.exponentialRampToValueAtTime(880, now + 0.12);
+          gain.gain.setValueAtTime(0.12, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+          osc.start(now);
+          osc.stop(now + 0.22);
+        } else if (type === 'ack') {
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(440, now);
+          osc.frequency.exponentialRampToValueAtTime(659, now + 0.15);
+          gain.gain.setValueAtTime(0.14, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+          osc.start(now);
+          osc.stop(now + 0.25);
+        } else if (type === 'approval') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(660, now);
+          osc.frequency.exponentialRampToValueAtTime(990, now + 0.2);
+          gain.gain.setValueAtTime(0.16, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+          osc.start(now);
+          osc.stop(now + 0.35);
+        }
+      } catch (e) {
+        console.warn("Audio chime error:", e);
+      }
+    }
+
+    function getInstantVocalAck(text) {
+      const lower = text.toLowerCase();
+      if (lower.includes("status") || lower.includes("how much") || lower.includes("sales")) {
+        return "Checking today's store status and live sales for you right away, Rajesh-ji.";
+      }
+      if (lower.includes("close") || lower.includes("closing") || lower.includes("end day")) {
+        return "Closing shop for today. Reconciling your cash drawer and checking inventory.";
+      }
+      if (lower.includes("campaign") || lower.includes("promo") || lower.includes("marketing") || lower.includes("grow") || lower.includes("weekend")) {
+        return "Starting campaign planning for Green Valley Grocers. Checking your customers and inventory.";
+      }
+      if (lower.includes("approve") || lower.includes("yes") || lower.includes("allow") || lower.includes("confirm") || lower.includes("go ahead")) {
+        return "Approved, sir! Dispatching via n8n Cloud now.";
+      }
+      if (lower.includes("deny") || lower.includes("reject") || lower.includes("cancel") || lower.includes("no")) {
+        return "Cancelled, sir. No changes were made.";
+      }
+      if (lower.includes("due") || lower.includes("credit") || lower.includes("remind") || lower.includes("overdue")) {
+        return "Checking overdue customer credit balances and store ledger records.";
+      }
+      return "On it! Working on that right now.";
+    }
+
+    // =========================================================================
+    // MAIN OPERATOR_OS APPLICATION (100% ORIGINAL LOGIC, UNIFIED SIDE-BY-SIDE UI)
+    // =========================================================================
+    function App() {
+      const [business, setBusiness] = useState(null);
+      const [metrics, setMetrics] = useState(null);
+      const [prompt, setPrompt] = useState("Close my shop for today.");
+      const [events, setEvents] = useState([]);
+      const [isStreaming, setIsStreaming] = useState(false);
+      const [sessionStatus, setSessionStatus] = useState("IDLE");
+      const [pendingApproval, setPendingApproval] = useState(null);
+      const [interactiveQuestion, setInteractiveQuestion] = useState(null);
+      const [activeTaskId, setActiveTaskId] = useState(null);
+      const [isListening, setIsListening] = useState(false);
+      const [voiceStatusText, setVoiceStatusText] = useState("");
+      const [voiceEnabled, setVoiceEnabled] = useState(true);
+      const [isSpeaking, setIsSpeaking] = useState(false);
+      const [currentSpokenLine, setCurrentSpokenLine] = useState("");
+      const [activeAgentStep, setActiveAgentStep] = useState("");
+      const [voiceHistory, setVoiceHistory] = useState([]);
+      const [auditLogs, setAuditLogs] = useState([]);
+      const [spreadsheetRows, setSpreadsheetRows] = useState([]);
+      const [integrationConfig, setIntegrationConfig] = useState({
+        n8n_webhook_url: "",
+        sarvam_api_key: "",
+        calle_api_key: "",
+        supplier_phone_number: "+919876543210",
+        telegram_bot_token: "",
+        telegram_chat_id: "",
+        google_sheet_id: "",
+        spreadsheet_webhook_url: ""
+      });
+      const [integrationStatusMsg, setIntegrationStatusMsg] = useState("");
+      const [activeTab, setActiveTab] = useState("operator");
+      const [voiceModeOpen, setVoiceModeOpen] = useState(false);
+      const [handsFreeMode, setHandsFreeMode] = useState(true);
+      const [micLevel, setMicLevel] = useState(0);
+      const [preferredLanguage, setPreferredLanguage] = useState("auto");
+      const [detectedLanguage, setDetectedLanguage] = useState("en-IN");
+      const [lastVoiceProvider, setLastVoiceProvider] = useState("Sarvam AI (saaras:v3 • bulbul:v3)");
+
+      const eventEndRef = useRef(null);
+      const recognitionRef = useRef(null);
+      const mediaRecorderRef = useRef(null);
+      const audioChunksRef = useRef([]);
+      const voiceEnabledRef = useRef(true);
+      const sessionStatusRef = useRef("IDLE");
+      const activeTaskIdRef = useRef(null);
+      const handsFreeModeRef = useRef(true);
+      const isSpeakingRef = useRef(false);
+      const isListeningRef = useRef(false);
+      const voiceModeOpenRef = useRef(false);
+      const hasGreetedRef = useRef(false);
+      const hasUserSpokenRef = useRef(false);
+      const recordStartRef = useRef(0);
+      const preferredLanguageRef = useRef("auto");
+      const detectedLanguageRef = useRef("en-IN");
+
+      useEffect(() => { voiceEnabledRef.current = voiceEnabled; }, [voiceEnabled]);
+      useEffect(() => { sessionStatusRef.current = sessionStatus; }, [sessionStatus]);
+      useEffect(() => { activeTaskIdRef.current = activeTaskId; }, [activeTaskId]);
+      useEffect(() => { handsFreeModeRef.current = handsFreeMode; }, [handsFreeMode]);
+      useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
+      useEffect(() => { isListeningRef.current = isListening; }, [isListening]);
+      useEffect(() => { voiceModeOpenRef.current = voiceModeOpen; }, [voiceModeOpen]);
+      useEffect(() => { preferredLanguageRef.current = preferredLanguage; }, [preferredLanguage]);
+      useEffect(() => { detectedLanguageRef.current = detectedLanguage; }, [detectedLanguage]);
+
+      const getEffectiveLanguage = (overrideLang = null) => {
+        if (overrideLang && overrideLang !== "auto") return overrideLang;
+        if (preferredLanguageRef.current && preferredLanguageRef.current !== "auto") {
+          return preferredLanguageRef.current;
+        }
+        return detectedLanguageRef.current || "en-IN";
+      };
+
+      // ================================================================
+      // BULLETPROOF WEB-AUDIO + PREFETCH SERVER TTS ENGINE
+      // ================================================================
+      const speechQueueRef = useRef([]);
+      const isSpeakingInternalRef = useRef(false);
+      const currentSourceRef = useRef(null);
+      const blessedAudioRef = useRef(null);
+      const lastSpokenTextRef = useRef("");
+
+      const unlockAudioEngine = () => {
+        try {
+          const ctx = getAudioContext();
+          if (ctx && ctx.state === "suspended") {
+            ctx.resume();
+          }
+          if (ctx) {
+            const buffer = ctx.createBuffer(1, 1, 22050);
+            const source = ctx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(ctx.destination);
+            source.start(0);
+          }
+          if (!blessedAudioRef.current) {
+            blessedAudioRef.current = new Audio();
+          }
+        } catch (e) {
+          console.warn("[Audio Unlock]", e);
+        }
+      };
+
+      useEffect(() => {
+        fetchSummary();
+        fetchAudit();
+        fetchSpreadsheet();
+        fetchIntegrationsConfig();
+        const handleAnyGesture = () => unlockAudioEngine();
+        window.addEventListener("click", handleAnyGesture, { passive: true });
+        window.addEventListener("keydown", handleAnyGesture, { passive: true });
+        return () => {
+          window.removeEventListener("click", handleAnyGesture);
+          window.removeEventListener("keydown", handleAnyGesture);
+        };
+      }, []);
+
+      useEffect(() => {
+        if (eventEndRef.current) {
+          eventEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, [events]);
+
+      const fetchSummary = async () => {
+        try {
+          const res = await fetch("/api/businesses/biz_001/summary");
+          const data = await res.json();
+          setBusiness(data.business);
+          setMetrics(data.metrics);
+        } catch (e) {
+          console.error("Failed to fetch summary", e);
+        }
+      };
+
+      const fetchAudit = async () => {
+        try {
+          const res = await fetch("/api/audit/biz_001");
+          const data = await res.json();
+          setAuditLogs(data.events || []);
+        } catch (e) {
+          console.error("Failed to fetch audit", e);
+        }
+      };
+
+      const fetchSpreadsheet = async () => {
+        try {
+          const res = await fetch("/api/spreadsheet");
+          const data = await res.json();
+          setSpreadsheetRows(data.rows || []);
+        } catch (e) {
+          console.error("Failed to fetch spreadsheet", e);
+        }
+      };
+
+      const fetchIntegrationsConfig = async () => {
+        try {
+          const res = await fetch("/api/integrations/config");
+          const data = await res.json();
+          setIntegrationConfig((prev) => ({
+            ...prev,
+            n8n_webhook_url: data.n8n_webhook_url || data.n8n_base_url || prev.n8n_webhook_url,
+            supplier_phone_number: data.supplier_phone_number || prev.supplier_phone_number,
+            telegram_chat_id: data.telegram_chat_id || prev.telegram_chat_id,
+            google_sheet_id: data.google_sheet_id || prev.google_sheet_id,
+            spreadsheet_webhook_url: data.spreadsheet_webhook_url || prev.spreadsheet_webhook_url,
+            sarvam_configured: data.sarvam_configured ?? data.sarvam_api_key_set,
+            sarvam_api_key_masked: data.sarvam_api_key_masked || (data.sarvam_api_key_set ? "Configured" : ""),
+            calle_configured: data.calle_configured ?? data.calle_api_key_set,
+            telegram_configured: data.telegram_configured ?? data.telegram_bot_token_set,
+            calle_api_key_masked: data.calle_api_key_masked || data.calle_api_key_preview,
+            telegram_bot_token_masked: data.telegram_bot_token_masked || (data.telegram_bot_token_set ? "Configured" : "")
+          }));
+        } catch (e) {
+          console.error("Failed to fetch integrations config", e);
+        }
+      };
+
+      const recordLiveSale = async (amount = 1250, method = "UPI") => {
+        try {
+          const res = await fetch("/api/sales/record", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              business_id: "biz_001",
+              amount,
+              payment_method: method,
+              items_count: 5,
+              customer_name: "Walk-in Customer"
+            })
+          });
+          const data = await res.json();
+          await fetchSummary();
+          await fetchAudit();
+          await fetchSpreadsheet();
+          if (data && data.new_total_sales_today) {
+            setVoiceStatusText(`✅ Recorded +₹${amount.toLocaleString()} (${method}) into SQLite DB! New Gross Sales: ₹${data.new_total_sales_today.toLocaleString()}.`);
+          }
+        } catch (e) {
+          console.error("Failed to record live sale", e);
+        }
+      };
+
+      const saveIntegrationsConfig = async () => {
+        setIntegrationStatusMsg("Saving integration keys...");
+        try {
+          const res = await fetch("/api/integrations/config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(integrationConfig)
+          });
+          await res.json();
+          setIntegrationStatusMsg("✅ Saved! Active keys updated in .env and runtime memory.");
+          await fetchIntegrationsConfig();
+        } catch (e) {
+          setIntegrationStatusMsg("❌ Failed to save integration config.");
+        }
+      };
+
+      const [isCallingCalle, setIsCallingCalle] = useState(false);
+      const [calleQuickStatus, setCalleQuickStatus] = useState("");
+
+      const triggerTestCalle = async () => {
+        setIsCallingCalle(true);
+        const targetPhone = integrationConfig.supplier_phone_number || "+918496074290";
+        setCalleQuickStatus(`📞 Initiating live CALL-E call to supplier (${targetPhone})...`);
+        setIntegrationStatusMsg("📞 Calling supplier via CALL-E API (https://api.heycall-e.com/v1/calls)...");
+        try {
+          if (integrationConfig.calle_api_key || integrationConfig.supplier_phone_number) {
+            await fetch("/api/integrations/config", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(integrationConfig)
+            });
+          }
+          const res = await fetch("/api/integrations/test-calle", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              phone: integrationConfig.supplier_phone_number,
+              supplier_phone_number: integrationConfig.supplier_phone_number
+            })
+          });
+          const data = await res.json();
+          const callInfo = data.calle_result || data || {};
+          const msg = `📞 CALL-E Call Triggered (${targetPhone}): ${callInfo.status || "DISPATCHED"} ${callInfo.call_id ? `• Call ID: ${callInfo.call_id}` : ""}`;
+          setCalleQuickStatus(msg);
+          setIntegrationStatusMsg(`📞 CALL-E Result: ${callInfo.status || "DISPATCHED"} ${callInfo.call_id ? `(Call ID: ${callInfo.call_id})` : ""} ${callInfo.reason || callInfo.response_preview || ""}`);
+          await fetchSpreadsheet();
+          await fetchAudit();
+          setTimeout(() => setCalleQuickStatus(""), 8000);
+        } catch (e) {
+          setCalleQuickStatus("❌ CALL-E call failed: " + e.message);
+          setIntegrationStatusMsg("❌ CALL-E test call failed: " + e.message);
+          setTimeout(() => setCalleQuickStatus(""), 8000);
+        } finally {
+          setIsCallingCalle(false);
+        }
+      };
+
+      const triggerTestTelegram = async () => {
+        setIntegrationStatusMsg("📨 Sending payment reminder to Telegram...");
+        try {
+          if (integrationConfig.telegram_bot_token || integrationConfig.telegram_chat_id) {
+            await fetch("/api/integrations/config", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(integrationConfig)
+            });
+          }
+          const res = await fetch("/api/integrations/test-telegram", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: integrationConfig.telegram_chat_id })
+          });
+          const data = await res.json();
+          const tgInfo = data.telegram_result || data || {};
+          setIntegrationStatusMsg(`📨 Telegram Result: ${tgInfo.status || "DISPATCHED"} ${tgInfo.message_id ? `(Msg ID: ${tgInfo.message_id})` : ""} ${tgInfo.reason || tgInfo.response_preview || ""}`);
+          await fetchSpreadsheet();
+          await fetchAudit();
+        } catch (e) {
+          setIntegrationStatusMsg("❌ Telegram test failed: " + e.message);
+        }
+      };
+
+      const processQueue = async () => {
+        if (isSpeakingInternalRef.current) return;
+        if (speechQueueRef.current.length === 0) {
+          setIsSpeaking(false);
+          isSpeakingRef.current = false;
+          setCurrentSpokenLine("");
+          handlePostSpeechAutoListen();
+          return;
+        }
+
+        const item = speechQueueRef.current.shift();
+        const { text, lang, fetchPromise, onFinish } = item;
+        isSpeakingInternalRef.current = true;
+        setIsSpeaking(true);
+        isSpeakingRef.current = true;
+        setCurrentSpokenLine(text);
+        setVoiceHistory((prev) => {
+          if (prev.length > 0 && prev[prev.length - 1].text === text) return prev;
+          return [...prev.slice(-6), { role: "assistant", text }];
+        });
+
+        const advanceNext = () => {
+          isSpeakingInternalRef.current = false;
+          currentSourceRef.current = null;
+          if (onFinish) onFinish();
+          setTimeout(processQueue, 60);
+        };
+
+        try {
+          const arrayBuffer = await fetchPromise;
+          if (!isSpeakingInternalRef.current) return;
+
+          const ctx = getAudioContext();
+          if (ctx && arrayBuffer && arrayBuffer.byteLength > 100) {
+            if (ctx.state === "suspended") {
+              try { await ctx.resume(); } catch (e) {}
+            }
+            const audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
+            if (!isSpeakingInternalRef.current) return;
+
+            const source = ctx.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(ctx.destination);
+            currentSourceRef.current = source;
+
+            source.onended = () => {
+              advanceNext();
+            };
+            source.start(0);
+            return;
+          }
+        } catch (err) {
+          console.warn("[TTS WebAudio Fallback]", err);
+        }
+
+        try {
+          const audio = blessedAudioRef.current || new Audio();
+          const activeLang = lang || getEffectiveLanguage();
+          audio.src = `/api/tts?text=${encodeURIComponent(text)}&lang=${encodeURIComponent(activeLang)}`;
+          currentSourceRef.current = audio;
+          audio.onended = advanceNext;
+          audio.onerror = advanceNext;
+          await audio.play();
+        } catch (err2) {
+          console.warn("[TTS HTML5 Fallback]", err2);
+          advanceNext();
+        }
+      };
+
+      const speakInstant = (text, onFinishCallback = null, overrideLang = null) => {
+        if (!text || !voiceEnabledRef.current) {
+          if (onFinishCallback) onFinishCallback();
+          return;
+        }
+        const cleanText = text.replace(/[#*`_]/g, '').trim();
+        if (!cleanText) {
+          if (onFinishCallback) onFinishCallback();
+          return;
+        }
+        if (lastSpokenTextRef.current === cleanText && (isSpeakingInternalRef.current || speechQueueRef.current.length > 0)) {
+          return;
+        }
+        lastSpokenTextRef.current = cleanText;
+        const activeLang = getEffectiveLanguage(overrideLang);
+
+        const fetchPromise = fetch(`/api/tts?text=${encodeURIComponent(cleanText)}&lang=${encodeURIComponent(activeLang)}`)
+          .then((r) => (r.ok ? r.arrayBuffer() : null))
+          .catch(() => null);
+
+        speechQueueRef.current.push({ text: cleanText, lang: activeLang, fetchPromise, onFinish: onFinishCallback });
+        processQueue();
+      };
+
+      const speakImmediate = (text, onFinishCallback = null, overrideLang = null) => {
+        stopSpeaking();
+        lastSpokenTextRef.current = "";
+        speakInstant(text, onFinishCallback, overrideLang);
+      };
+
+      const enqueueVoiceNarration = (text, forceSpeak = false, overrideLang = null) => {
+        if (!text || (!voiceEnabledRef.current && !forceSpeak)) return;
+        speakInstant(text, null, overrideLang);
+      };
+
+      const stopSpeaking = () => {
+        speechQueueRef.current = [];
+        isSpeakingInternalRef.current = false;
+        if (currentSourceRef.current) {
+          try {
+            if (currentSourceRef.current.stop) currentSourceRef.current.stop();
+            if (currentSourceRef.current.pause) currentSourceRef.current.pause();
+          } catch (e) {}
+          currentSourceRef.current = null;
+        }
+        setIsSpeaking(false);
+        isSpeakingRef.current = false;
+        setCurrentSpokenLine("");
+      };
+
+      const handlePostSpeechAutoListen = () => {
+        if (!handsFreeModeRef.current) return;
+
+        const shouldAutoListen =
+          voiceModeOpenRef.current ||
+          sessionStatusRef.current === "WAITING_APPROVAL" ||
+          sessionStatusRef.current === "WAITING_FOR_USER_INPUT";
+
+        if (shouldAutoListen) {
+          setTimeout(() => {
+            if (!isListeningRef.current && !isSpeakingInternalRef.current && speechQueueRef.current.length === 0) {
+              startListeningSession();
+            }
+          }, 400);
+        }
+      };
+
+      const handleExecute = async (taskPrompt, overrideLang = null) => {
+        unlockAudioEngine();
+        const textToRun = (taskPrompt !== undefined ? taskPrompt : prompt).trim();
+        if (!textToRun || isStreaming) return;
+
+        const activeLang = getEffectiveLanguage(overrideLang);
+
+        setVoiceHistory((prev) => [...prev.slice(-6), { role: "user", text: textToRun }]);
+
+        const lower = textToRun.toLowerCase();
+
+        if (sessionStatusRef.current === "WAITING_APPROVAL" && activeTaskIdRef.current) {
+          if (
+            lower.includes("approve") || lower.includes("yes") || lower.includes("allow") ||
+            lower.includes("go ahead") || lower.includes("confirm") || lower.includes("proceed") ||
+            lower.includes("sure") || lower.includes("ok") || lower.includes("haan") ||
+            lower.includes("haudu") || lower.includes("मंजूर") || lower.includes("हाँ") ||
+            lower.includes("अप्रूव") || lower.includes("ಹೌದು") || lower.includes("ಅನುಮೋದಿಸಿ")
+          ) {
+            handleApproval("allow");
+            return;
+          }
+          if (
+            lower.includes("reject") || lower.includes("deny") || lower.includes("cancel") ||
+            lower.includes("no") || lower.includes("abort") || lower.includes("stop") ||
+            lower.includes("nahi") || lower.includes("beda") || lower.includes("नहीं") ||
+            lower.includes("रद्द") || lower.includes("ಬೇಡ") || lower.includes("ರದ್ದು")
+          ) {
+            handleApproval("deny");
+            return;
+          }
+        }
+
+        if (sessionStatusRef.current === "WAITING_FOR_USER_INPUT" && activeTaskIdRef.current) {
+          handleInteractiveResponse(textToRun);
+          return;
+        }
+
+        stopSpeaking();
+        lastSpokenTextRef.current = "";
+
+        setIsStreaming(true);
+        setSessionStatus("RUNNING");
+        sessionStatusRef.current = "RUNNING";
+        setActiveAgentStep("Dispatching TrueForge Operator Agents...");
+        setPendingApproval(null);
+        setInteractiveQuestion(null);
+        setEvents([]);
+
+        try {
+          const initRes = await fetch("/api/tasks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ business_id: "biz_001", prompt: textToRun, language_code: activeLang })
+          });
+          const initData = await initRes.json();
+          const taskId = initData.task_id;
+          setActiveTaskId(taskId);
+          activeTaskIdRef.current = taskId;
+
+          const eventSource = new EventSource(`/api/tasks/${taskId}/events?prompt=${encodeURIComponent(textToRun)}&lang=${encodeURIComponent(activeLang)}`);
+
+          eventSource.onmessage = (e) => {
+            try {
+              const evt = JSON.parse(e.data);
+              setEvents((prev) => [...prev, evt]);
+
+              if (evt.type === "thread.created") {
+                setActiveAgentStep(`TrueForge Subagent: ${evt.title}...`);
+              } else if (evt.type === "sandbox.created") {
+                setActiveAgentStep(`${evt.provider || "Daytona Cloud Sandbox"}: ${evt.mode || "Code Mode"}`);
+              } else if (evt.type === "tool.call") {
+                const stepDesc = evt.agent_step || `Running ${evt.tool_name.replace(/_/g, ' ')}...`;
+                setActiveAgentStep(stepDesc);
+              }
+
+              if (evt.voice_text) {
+                enqueueVoiceNarration(evt.voice_text, false, evt.language_code || activeLang);
+              }
+
+              if (evt.type === "agent.question_required") {
+                setSessionStatus("WAITING_FOR_USER_INPUT");
+                sessionStatusRef.current = "WAITING_FOR_USER_INPUT";
+                setInteractiveQuestion(evt);
+                setActiveAgentStep("Waiting for your campaign preference...");
+                playChime('approval');
+              }
+
+              if (evt.type === "tool.approval_required") {
+                setSessionStatus("WAITING_APPROVAL");
+                sessionStatusRef.current = "WAITING_APPROVAL";
+                if (evt.tool_calls && evt.tool_calls.length > 0) {
+                  setPendingApproval(evt.tool_calls[0]);
+                }
+                setActiveAgentStep("Approval checkpoint reached — Say 'Approve' or 'Deny'");
+                playChime('approval');
+              }
+
+              if (evt.type === "turn.done") {
+                if (evt.state?.status === "waiting_for_input") {
+                  setIsStreaming(false);
+                } else if (evt.state?.status === "done" && !evt.state.required_actions?.length) {
+                  setSessionStatus("COMPLETED");
+                  sessionStatusRef.current = "COMPLETED";
+                  setIsStreaming(false);
+                  setActiveAgentStep("");
+                  fetchSummary();
+                  fetchAudit();
+                  fetchSpreadsheet();
+                  eventSource.close();
+                } else if (evt.state?.required_actions?.length) {
+                  setIsStreaming(false);
+                  eventSource.close();
+                }
+              }
+            } catch (err) {
+              console.error("Error parsing event", err);
+            }
+          };
+
+          eventSource.onerror = () => {
+            setIsStreaming(false);
+            eventSource.close();
+          };
+
+        } catch (e) {
+          console.error("Task initiation failed", e);
+          setIsStreaming(false);
+          setSessionStatus("IDLE");
+          setActiveAgentStep("");
+        }
+      };
+
+      const handleInteractiveResponse = async (choiceText) => {
+        unlockAudioEngine();
+        const taskId = activeTaskIdRef.current || activeTaskId;
+        if (!taskId) return;
+        const activeLang = getEffectiveLanguage();
+        stopSpeaking();
+        lastSpokenTextRef.current = "";
+        setIsStreaming(true);
+        setSessionStatus("RUNNING");
+        sessionStatusRef.current = "RUNNING";
+        setInteractiveQuestion(null);
+        setActiveAgentStep("TrueForge Sandbox: Simulating campaign ROI...");
+
+        try {
+          const res = await fetch(`/api/tasks/${taskId}/input`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ input: choiceText, language_code: activeLang })
+          });
+
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n\n");
+            buffer = lines.pop();
+
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                try {
+                  const evt = JSON.parse(line.substring(6));
+                  setEvents((prev) => [...prev, evt]);
+                  if (evt.type === "tool.call") {
+                    setActiveAgentStep(evt.agent_step || `Running ${evt.tool_name}...`);
+                  }
+                  if (evt.voice_text) {
+                    enqueueVoiceNarration(evt.voice_text, false, evt.language_code || activeLang);
+                  }
+                  if (evt.type === "tool.approval_required") {
+                    setSessionStatus("WAITING_APPROVAL");
+                    sessionStatusRef.current = "WAITING_APPROVAL";
+                    if (evt.tool_calls && evt.tool_calls.length > 0) {
+                      setPendingApproval(evt.tool_calls[0]);
+                    }
+                    setActiveAgentStep("Campaign staged — Say 'Approve' or 'Deny'");
+                    playChime('approval');
+                  }
+                  if (evt.type === "turn.done") {
+                    setIsStreaming(false);
+                  }
+                } catch (ex) {
+                  console.error(ex);
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Interactive input failed", err);
+          setIsStreaming(false);
+        }
+      };
+
+      const handleApproval = async (decision) => {
+        unlockAudioEngine();
+        const taskId = activeTaskIdRef.current || activeTaskId;
+        if (!taskId) return;
+        const activeLang = getEffectiveLanguage();
+        stopSpeaking();
+        lastSpokenTextRef.current = "";
+        setIsStreaming(true);
+        setSessionStatus("EXECUTING");
+        sessionStatusRef.current = "EXECUTING";
+        setActiveAgentStep(decision === "allow" ? "Dispatching approved action via n8n Cloud..." : "Cancelling action...");
+
+        try {
+          const endpoint = decision === "allow" ? `/api/tasks/${taskId}/approve` : `/api/tasks/${taskId}/reject`;
+          const res = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              decision,
+              reason: decision === "allow" ? "Approved by store manager." : "Declined by store manager.",
+              language_code: activeLang
+            })
+          });
+
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n\n");
+            buffer = lines.pop();
+
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                try {
+                  const evt = JSON.parse(line.substring(6));
+                  setEvents((prev) => [...prev, evt]);
+                  if (evt.type === "tool.call") {
+                    setActiveAgentStep(evt.agent_step || `Running ${evt.tool_name}...`);
+                  }
+                  if (evt.voice_text) {
+                    enqueueVoiceNarration(evt.voice_text, false, evt.language_code || activeLang);
+                  }
+                  if (evt.type === "turn.done") {
+                    const nextStatus = decision === "allow" ? "COMPLETED" : "REJECTED";
+                    setSessionStatus(nextStatus);
+                    sessionStatusRef.current = nextStatus;
+                    setPendingApproval(null);
+                    setActiveAgentStep("");
+                    fetchSummary();
+                    fetchAudit();
+                    fetchSpreadsheet();
+                  }
+                } catch (ex) {
+                  console.error(ex);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Approval resume failed", e);
+        } finally {
+          setIsStreaming(false);
+        }
+      };
+
+      const startListeningSession = async () => {
+        unlockAudioEngine();
+        if (isListeningRef.current) return;
+
+        setVoiceEnabled(true);
+        voiceEnabledRef.current = true;
+        stopSpeaking();
+        setIsListening(true);
+        isListeningRef.current = true;
+        hasUserSpokenRef.current = false;
+        recordStartRef.current = Date.now();
+        setMicLevel(0);
+        playChime('listen');
+
+        let statusPrompt = "Listening (English / हिंदी / ಕನ್ನಡ)... Speak naturally!";
+        if (sessionStatusRef.current === "WAITING_APPROVAL") {
+          statusPrompt = "Awaiting decision... Say 'Approve' / 'हाँ' / 'ಹೌದು' or 'Deny'";
+        } else if (sessionStatusRef.current === "WAITING_FOR_USER_INPUT") {
+          statusPrompt = "Awaiting response... Say your choice (e.g. 'WhatsApp broadcast with 15% discount')";
+        }
+        setVoiceStatusText(statusPrompt);
+
+        try {
+          fetch("/api/voice/ensure-mic", { method: "POST" }).catch(() => {});
+
+          const rawStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true
+            }
+          });
+
+          let vadInterval = null;
+          let maxTimer = null;
+          let analyser = null;
+
+          try {
+            const ctx = getAudioContext();
+            if (ctx) {
+              if (ctx.state === "suspended") {
+                try { await ctx.resume(); } catch (e) {}
+              }
+              const micSource = ctx.createMediaStreamSource(rawStream);
+              const gainNode = ctx.createGain();
+              gainNode.gain.value = 2.5;
+              analyser = ctx.createAnalyser();
+              analyser.fftSize = 1024;
+              micSource.connect(gainNode);
+              gainNode.connect(analyser);
+            }
+          } catch (audioGraphErr) {
+            console.warn("Audio boost graph notice:", audioGraphErr);
+          }
+
+          const mediaRecorder = new MediaRecorder(rawStream);
+          mediaRecorderRef.current = mediaRecorder;
+          audioChunksRef.current = [];
+
+          try {
+            if (analyser) {
+              const timeData = new Uint8Array(analyser.fftSize);
+              let speechFrames = 0;
+              let silenceStart = null;
+
+              vadInterval = setInterval(() => {
+                if (mediaRecorder.state === "inactive") {
+                  clearInterval(vadInterval);
+                  return;
+                }
+                if (Date.now() - recordStartRef.current < 500) return;
+
+                analyser.getByteTimeDomainData(timeData);
+                let sumSq = 0;
+                for (let i = 0; i < timeData.length; i++) {
+                  const norm = (timeData[i] - 128) / 128.0;
+                  sumSq += norm * norm;
+                }
+                const rms = Math.sqrt(sumSq / timeData.length);
+                const levelPct = Math.min(100, Math.round(rms * 650));
+                setMicLevel(levelPct);
+
+                if (rms > 0.012) {
+                  speechFrames += 1;
+                  if (speechFrames >= 2) {
+                    if (!hasUserSpokenRef.current) {
+                      hasUserSpokenRef.current = true;
+                      setVoiceStatusText("🎙️ Hearing your voice... (Auto-sends when you pause, or tap Send)");
+                    }
+                  }
+                  silenceStart = null;
+                } else if (hasUserSpokenRef.current) {
+                  if (!silenceStart) {
+                    silenceStart = Date.now();
+                  } else if (Date.now() - silenceStart > 1550 && Date.now() - recordStartRef.current > 2000) {
+                    clearInterval(vadInterval);
+                    if (mediaRecorder.state !== "inactive") {
+                      try { mediaRecorder.stop(); } catch (e) {}
+                    }
+                  }
+                }
+              }, 80);
+            }
+          } catch (vadErr) {
+            console.warn("VAD setup notice:", vadErr);
+          }
+
+          mediaRecorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) {
+              audioChunksRef.current.push(e.data);
+            }
+          };
+
+          mediaRecorder.onstop = async () => {
+            if (vadInterval) clearInterval(vadInterval);
+            if (maxTimer) clearTimeout(maxTimer);
+            setMicLevel(0);
+
+            const chunks = audioChunksRef.current.slice();
+            rawStream.getTracks().forEach(t => t.stop());
+
+            if (chunks.length === 0) {
+              setIsListening(false);
+              isListeningRef.current = false;
+              setVoiceStatusText("");
+              return;
+            }
+
+            setVoiceStatusText("Sarvam AI transcribing your voice...");
+            setActiveAgentStep("Sarvam AI (saaras:v3): Transcribing & detecting language...");
+            const audioBlob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+              const base64String = (reader.result || "").toString().split(',')[1] || "";
+              try {
+                const res = await fetch("/api/voice/transcribe", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    audio_base64: base64String,
+                    mime_type: mediaRecorder.mimeType || 'audio/webm',
+                    preferred_language: preferredLanguageRef.current
+                  })
+                });
+                const data = await res.json();
+                setIsListening(false);
+                isListeningRef.current = false;
+                setVoiceStatusText("");
+                const respLang = data.language_code || getEffectiveLanguage();
+                setDetectedLanguage(respLang);
+                detectedLanguageRef.current = respLang;
+                if (data.provider) {
+                  setLastVoiceProvider(data.provider);
+                }
+                if (data.transcript && data.transcript.trim()) {
+                  const cleanSpoken = data.transcript.trim();
+                  setPrompt(cleanSpoken);
+                  playChime('ack');
+                  handleExecute(cleanSpoken, respLang);
+                } else {
+                  setActiveAgentStep("Didn't catch that — tap Speak and state your command");
+                }
+              } catch (err) {
+                console.error("Backend STT error:", err);
+                setIsListening(false);
+                isListeningRef.current = false;
+                setVoiceStatusText("");
+                setActiveAgentStep("");
+              }
+            };
+            reader.readAsDataURL(audioBlob);
+          };
+
+          mediaRecorder.start(200);
+
+          maxTimer = setTimeout(() => {
+            if (mediaRecorder.state !== "inactive") {
+              try { mediaRecorder.stop(); } catch (e) {}
+            }
+          }, 14000);
+
+        } catch (err) {
+          console.error("Microphone permission error:", err);
+          setIsListening(false);
+          isListeningRef.current = false;
+          setVoiceStatusText("Please allow microphone access to talk to OperatorOS.");
+        }
+      };
+
+      const finishAndSendVoice = () => {
+        unlockAudioEngine();
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+          try { mediaRecorderRef.current.stop(); } catch (e) {}
+        }
+      };
+
+      const cancelVoiceListening = () => {
+        audioChunksRef.current = [];
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+          try { mediaRecorderRef.current.stop(); } catch (e) {}
+        }
+        setIsListening(false);
+        isListeningRef.current = false;
+        setMicLevel(0);
+        setVoiceStatusText("");
+      };
+
+      const handleVoiceToggle = () => {
+        unlockAudioEngine();
+        if (isListening) {
+          if (!hasUserSpokenRef.current && Date.now() - recordStartRef.current < 4000) {
+            recordStartRef.current = Date.now();
+            playChime('listen');
+            setVoiceStatusText("🎙️ Microphone Active — Speak your command now!");
+            return;
+          }
+          finishAndSendVoice();
+        } else {
+          startListeningSession();
+        }
+      };
+
+      // Safe fallbacks for business float calculation
+      const targetFloat = business ? (business.target_cash_float ?? business.cash_drawer_target ?? 5000) : 5000;
+      const currentCash = business ? (business.current_cash_in_drawer ?? 14850) : 14850;
+      const safeDropAmt = Math.max(0, currentCash - targetFloat);
+      const totalSalesFormatted = metrics ? metrics.total_sales_today.toLocaleString() : "9,850";
+
+      // Latest spoken message from events or live speech
+      const lastSpokenEvent = [...events].reverse().find((e) => e.voice_text || e.type === "model.message.delta");
+      const activeDisplayTranscript =
+        isListening
+          ? voiceStatusText
+          : currentSpokenLine
+          ? currentSpokenLine
+          : lastSpokenEvent
+          ? (lastSpokenEvent.content || lastSpokenEvent.voice_text)
+          : voiceHistory.length > 0
+          ? voiceHistory[voiceHistory.length - 1].text
+          : null;
+
+      return (
+        <div className="flex flex-col min-h-screen">
+          {/* =====================================================================
+              1. UNIFIED TOP HEADER BAR (Navigation + Audio Controls in One Bar)
+             ===================================================================== */}
+          <header className="border-b border-[#E8E4DF] bg-white sticky top-0 z-40 px-4 sm:px-6 shadow-sm">
+            <div className="max-w-[1400px] mx-auto py-3 flex flex-wrap items-center justify-between gap-4">
+              {/* Brand + Store Identity */}
+              <div className="flex items-center space-x-3">
+                <div className="w-9 h-9 rounded-md bg-[#1A1A1A] text-[#D4A84B] flex items-center justify-center shadow-sm">
+                  <i className="fa-solid fa-feather-pointed text-sm"></i>
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h1 className="font-display text-lg sm:text-xl font-bold text-[#1A1A1A] tracking-tight">
+                      OperatorOS
+                    </h1>
+                    <span className="small-caps px-2 py-0.5 rounded bg-[#F5F3F0] text-[#B8860B] border border-[#E8E4DF]">
+                      TrueForge AI
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#6B6B6B]">
+                    {business ? `${business.name} • ${business.category}` : "Green Valley Organic Grocers"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Center Workspace Tab Switcher */}
+              <nav aria-label="Workspace Views" className="flex flex-wrap items-center gap-1.5 bg-[#F5F3F0] p-1 rounded-lg border border-[#E8E4DF]">
+                {[
+                  { id: "operator", label: "Operator Cockpit", icon: "fa-terminal" },
+                  { id: "spreadsheet", label: `Live Spreadsheet (${spreadsheetRows.length})`, icon: "fa-table" },
+                  { id: "integrations", label: "n8n & API Setup", icon: "fa-plug" },
+                  { id: "audit", label: `Audit Trail (${auditLogs.length})`, icon: "fa-list-check" }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      if (tab.id === "spreadsheet") fetchSpreadsheet();
+                      if (tab.id === "integrations") fetchIntegrationsConfig();
+                      if (tab.id === "audit") fetchAudit();
+                    }}
+                    className={`serif-focus px-3.5 py-1.5 rounded-md text-xs font-medium transition-all duration-150 flex items-center space-x-1.5 ${
+                      activeTab === tab.id
+                        ? "bg-white text-[#1A1A1A] shadow-sm border border-[#B8860B]/40 font-semibold"
+                        : "text-[#6B6B6B] hover:text-[#1A1A1A]"
+                    }`}>
+                    <i className={`fa-solid ${tab.icon} ${activeTab === tab.id ? "text-[#B8860B]" : "text-[#6B6B6B]"}`}></i>
+                    <span>{tab.label}</span>
+                  </button>
+                ))}
+              </nav>
+
+              {/* Right Voice Controls + Manual CALL-E Trigger */}
+              <div className="flex items-center space-x-2">
+                <SerifButton
+                  variant="outline"
+                  size="xs"
+                  disabled={isCallingCalle}
+                  onClick={triggerTestCalle}
+                  title="Directly trigger outbound CALL-E voice call to supplier">
+                  <i className={`fa-solid ${isCallingCalle ? "fa-circle-notch fa-spin" : "fa-phone-volume"} text-[#B8860B] mr-1.5`}></i>
+                  <span>{isCallingCalle ? "Calling..." : "Initiate Call"}</span>
+                </SerifButton>
+
+                <SerifButton
+                  variant="outline"
+                  size="xs"
+                  active={voiceEnabled}
+                  onClick={() => {
+                    const next = !voiceEnabled;
+                    setVoiceEnabled(next);
+                    if (!next) stopSpeaking();
+                  }}>
+                  <i className={`fa-solid ${voiceEnabled ? "fa-volume-high text-[#B8860B]" : "fa-volume-xmark"} mr-1.5`}></i>
+                  <span>Voice: {voiceEnabled ? "ON" : "MUTED"}</span>
+                </SerifButton>
+
+                <SerifButton
+                  variant="primary"
+                  size="xs"
+                  onClick={() => {
+                    unlockAudioEngine();
+                    setVoiceModeOpen(true);
+                    voiceModeOpenRef.current = true;
+                    if (!hasGreetedRef.current) {
+                      hasGreetedRef.current = true;
+                      if (!isListening && !isSpeaking) {
+                        speakImmediate("Namaste Rajesh-ji! Operator O S live voice mode is active. How can I help with your store today?");
+                      }
+                    } else if (!isListening && !isSpeaking) {
+                      startListeningSession();
+                    }
+                  }}>
+                  <i className="fa-solid fa-microphone-lines mr-1.5"></i>
+                  <span>Fullscreen Voice HUD</span>
+                </SerifButton>
+              </div>
+            </div>
+          </header>
+
+          {/* =====================================================================
+              2. COMPACT 4-CARD LIVE KPI BAR (Always Visible Above the Cockpit)
+             ===================================================================== */}
+          <section aria-label="Live SQLite Store Metrics" className="border-b border-[#E8E4DF] bg-[#F5F3F0]/70 px-4 sm:px-6 py-3">
+            <div className="max-w-[1400px] mx-auto grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {/* Metric 1: Gross Sales */}
+              <div className="bg-white border border-[#E8E4DF] rounded-lg px-4 py-2.5 shadow-sm flex items-center justify-between">
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className="small-caps text-[#6B6B6B]">Today&apos;s Gross Sales</span>
+                    <button
+                      onClick={() => recordLiveSale(1250, "UPI")}
+                      title="Insert a real ₹1,250 sale row into SQLite DB"
+                      className="serif-focus text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-[rgba(184,134,11,0.12)] text-[#B8860B] hover:bg-[#B8860B] hover:text-white transition-colors">
+                      +₹1,250 Sale
+                    </button>
+                  </div>
+                  <p className="font-display text-2xl font-bold text-[#1A1A1A] mt-0.5">
+                    ₹{totalSalesFormatted}
+                  </p>
+                  <p className="text-[11px] text-[#6B6B6B]">
+                    Cash ₹{metrics?.cash_sales !== undefined ? metrics.cash_sales.toLocaleString() : "4,850"} • UPI ₹{metrics?.upi_sales !== undefined ? metrics.upi_sales.toLocaleString() : "3,500"}
+                  </p>
+                </div>
+                <div className="w-9 h-9 rounded-full bg-[#F5F3F0] border border-[#E8E4DF] flex items-center justify-center text-[#B8860B] shrink-0">
+                  <i className="fa-solid fa-chart-line text-sm"></i>
+                </div>
+              </div>
+
+              {/* Metric 2: Cash Drawer */}
+              <div className="bg-white border border-[#E8E4DF] rounded-lg px-4 py-2.5 shadow-sm flex items-center justify-between">
+                <div>
+                  <span className="small-caps text-[#6B6B6B] block">Cash in Drawer</span>
+                  <p className="font-display text-2xl font-bold text-[#1A1A1A] mt-0.5">
+                    ₹{currentCash.toLocaleString()}
+                  </p>
+                  <p className="text-[11px] text-[#6B6B6B]">
+                    Float ₹{targetFloat.toLocaleString()} • Drop ₹{safeDropAmt.toLocaleString()}
+                  </p>
+                </div>
+                <div className="w-9 h-9 rounded-full bg-[#F5F3F0] border border-[#E8E4DF] flex items-center justify-center text-[#B8860B] shrink-0">
+                  <i className="fa-solid fa-vault text-sm"></i>
+                </div>
+              </div>
+
+              {/* Metric 3: Low Stock Alerts */}
+              <div className="bg-white border border-[#E8E4DF] rounded-lg px-4 py-2.5 shadow-sm flex items-center justify-between">
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className="small-caps text-[#6B6B6B]">Low Stock Alerts</span>
+                    <button
+                      onClick={triggerTestCalle}
+                      disabled={isCallingCalle}
+                      title="Manually trigger outbound CALL-E supplier voice call"
+                      className="serif-focus text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-[rgba(184,134,11,0.12)] text-[#B8860B] hover:bg-[#B8860B] hover:text-white transition-colors">
+                      {isCallingCalle ? "Calling..." : "📞 Initiate Call"}
+                    </button>
+                  </div>
+                  <p className="font-display text-2xl font-bold text-[#B8860B] mt-0.5">
+                    {metrics ? metrics.low_stock_items_count : 4} Items Low
+                  </p>
+                  <p className="text-[11px] text-[#6B6B6B]">
+                    Milk, Eggs, Bread, Yogurt (CALL-E)
+                  </p>
+                </div>
+                <div className="w-9 h-9 rounded-full bg-[#F5F3F0] border border-[#E8E4DF] flex items-center justify-center text-[#B8860B] shrink-0">
+                  <i className="fa-solid fa-triangle-exclamation text-sm"></i>
+                </div>
+              </div>
+
+              {/* Metric 4: Overdue Customer Dues */}
+              <div className="bg-white border border-[#E8E4DF] rounded-lg px-4 py-2.5 shadow-sm flex items-center justify-between">
+                <div>
+                  <span className="small-caps text-[#6B6B6B] block">Overdue Credit Dues</span>
+                  <p className="font-display text-2xl font-bold text-[#1A1A1A] mt-0.5">
+                    ₹{metrics ? metrics.total_overdue_dues.toLocaleString() : "4,250"}
+                  </p>
+                  <p className="text-[11px] text-[#6B6B6B]">
+                    {metrics ? metrics.overdue_customers_count : 2} accounts &gt; 7d (Telegram)
+                  </p>
+                </div>
+                <div className="w-9 h-9 rounded-full bg-[#F5F3F0] border border-[#E8E4DF] flex items-center justify-center text-[#B8860B] shrink-0">
+                  <i className="fa-solid fa-receipt text-sm"></i>
+                </div>
+              </div>
+            </div>
+            {calleQuickStatus && (
+              <div className="max-w-[1400px] mx-auto mt-2.5 px-3.5 py-2 rounded-md bg-[rgba(184,134,11,0.1)] border border-[#B8860B] flex items-center justify-between text-xs font-mono text-[#1A1A1A]">
+                <span>{calleQuickStatus}</span>
+                <button onClick={() => setCalleQuickStatus("")} className="text-[#6B6B6B] hover:text-[#1A1A1A] ml-3">✕</button>
+              </div>
+            )}
+          </section>
+
+          {/* =====================================================================
+              3. MAIN WORKSPACE AREA (SIDE-BY-SIDE COMMAND & LIVE DISPLAY COCKPIT)
+             ===================================================================== */}
+          <div className="flex-1 max-w-[1400px] mx-auto w-full px-4 sm:px-6 py-5">
+
+            {activeTab === "operator" ? (
+              /* =================================================================
+                 TAB 1: SIDE-BY-SIDE OPERATOR COCKPIT
+                 Left (5 Cols): Command Input + Live Voice Stage + Quick Actions + Approval Gate
+                 Right (7 Cols): Live Execution Display + Spoken Output + Live Ledger Feed
+                 ================================================================= */
+              <main className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+                {/* ===============================================================
+                    LEFT COLUMN (5 COLS): COMMAND DECK & VOICE CONTROL STAGE
+                   =============================================================== */}
+                <div className="lg:col-span-5 flex flex-col space-y-5">
+
+                  {/* 1. UNIFIED VOICE & TEXT COMMAND DECK */}
+                  <SerifCard
+                    accentTop={true}
+                    elevated={true}
+                    label="Step 1 • Issue Command"
+                    title="Voice & Text Command Deck"
+                    headerRight={
+                      <span className={`font-mono text-[11px] font-semibold px-2.5 py-0.5 rounded border ${
+                        isListening
+                          ? "bg-[#B8860B] text-white border-[#B8860B]"
+                          : isSpeaking
+                          ? "bg-[#1A1A1A] text-[#D4A84B] border-[#1A1A1A]"
+                          : "bg-[#F5F3F0] text-[#6B6B6B] border-[#E8E4DF]"
+                      }`}>
+                        {isListening ? `🎙️ MIC ${micLevel}%` : isSpeaking ? "🔊 SPEAKING" : "READY"}
+                      </span>
+                    }>
+                    <div className="space-y-4">
+
+                      {/* Integrated Live Voice Stage (Always visible right inside the Command Deck!) */}
+                      <div className={`rounded-lg p-4 border transition-all duration-200 ${
+                        isListening
+                          ? "bg-[rgba(184,134,11,0.08)] border-[#B8860B]"
+                          : isSpeaking
+                          ? "bg-[#F5F3F0] border-[#B8860B]/60"
+                          : "bg-[#FAFAF8] border-[#E8E4DF]"
+                      }`}>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center space-x-3 min-w-0">
+                            <button
+                              onClick={isListening ? finishAndSendVoice : handleVoiceToggle}
+                              title="Click to Speak or Send Voice"
+                              className={`serif-focus w-12 h-12 rounded-full flex items-center justify-center shrink-0 transition-all duration-200 shadow-sm ${
+                                isListening
+                                  ? "bg-[#B8860B] text-white shadow-accent scale-105"
+                                  : isSpeaking
+                                  ? "bg-[#1A1A1A] text-[#D4A84B]"
+                                  : "bg-white text-[#B8860B] border border-[#B8860B] hover:bg-[#B8860B] hover:text-white"
+                              }`}>
+                              <i className={`fa-solid ${
+                                isListening ? "fa-paper-plane text-base" : isSpeaking ? "fa-volume-high text-base" : "fa-microphone text-base"
+                              }`}></i>
+                            </button>
+
+                            <div className="min-w-0">
+                              <div className="flex items-center space-x-2">
+                                <span className="font-semibold text-sm text-[#1A1A1A]">
+                                  {isListening
+                                    ? "Listening... Tap to Send Now"
+                                    : isSpeaking
+                                    ? "OperatorOS Speaking Out Loud"
+                                    : "Tap Microphone to Speak"}
+                                </span>
+                                {(isListening || isSpeaking) && (
+                                  <div className="voice-wave">
+                                    <span></span><span></span><span></span><span></span>
+                                  </div>
+                                )}
+                              </div>
+                              <p className="text-xs text-[#6B6B6B] truncate">
+                                {isListening
+                                  ? voiceStatusText
+                                  : isSpeaking
+                                  ? currentSpokenLine
+                                  : "Hands-free voice & instant neural speech response"}
+                              </p>
+                            </div>
+                          </div>
+
+                          {isListening && (
+                            <SerifButton variant="primary" size="xs" onClick={finishAndSendVoice}>
+                              <span>Send</span>
+                            </SerifButton>
+                          )}
+                          {isSpeaking && (
+                            <SerifButton variant="outline" size="xs" onClick={stopSpeaking}>
+                              <span>Stop</span>
+                            </SerifButton>
+                          )}
+                        </div>
+
+                        {/* Live Mic RMS Meter when listening */}
+                        {isListening && (
+                          <div className="mt-3 w-full h-1.5 bg-[#E8E4DF] rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-[#B8860B] transition-all duration-75"
+                              style={{ width: `${Math.max(8, micLevel)}%` }}
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Sarvam AI Multilingual Mode Selector (Auto / English / Hindi / Kannada) */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 bg-[#F5F3F0] px-3 py-2 rounded-md border border-[#E8E4DF]">
+                        <div className="flex items-center space-x-1.5">
+                          <i className="fa-solid fa-language text-[#B8860B] text-sm"></i>
+                          <span className="font-mono text-[11px] font-semibold text-[#1A1A1A]">
+                            Sarvam AI Voice:
+                          </span>
+                          <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-white text-[#B8860B] border border-[#E8E4DF]">
+                            {getEffectiveLanguage() === "hi-IN" ? "🇮🇳 हिंदी" : getEffectiveLanguage() === "kn-IN" ? "🇮🇳 ಕನ್ನಡ" : "🇮🇳 English"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {[
+                            { code: "auto", label: "Auto" },
+                            { code: "en-IN", label: "EN" },
+                            { code: "hi-IN", label: "हिंदी" },
+                            { code: "kn-IN", label: "ಕನ್ನಡ" }
+                          ].map((langOpt) => (
+                            <button
+                              key={langOpt.code}
+                              type="button"
+                              onClick={() => {
+                                setPreferredLanguage(langOpt.code);
+                                preferredLanguageRef.current = langOpt.code;
+                                if (langOpt.code !== "auto") {
+                                  setDetectedLanguage(langOpt.code);
+                                  detectedLanguageRef.current = langOpt.code;
+                                }
+                              }}
+                              className={`px-2 py-0.5 rounded text-[11px] font-medium transition-all ${
+                                preferredLanguage === langOpt.code
+                                  ? "bg-[#B8860B] text-white font-semibold shadow-sm"
+                                  : "bg-white text-[#6B6B6B] hover:text-[#1A1A1A] border border-[#E8E4DF]"
+                              }`}>
+                              {langOpt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Command Input + Execute Button */}
+                      <div className="space-y-2">
+                        <label htmlFor="command-input" className="small-caps text-[#6B6B6B] block">
+                          Written or Transcribed Command (English, हिंदी, or ಕನ್ನಡ)
+                        </label>
+                        <div className="flex items-stretch gap-2">
+                          <input
+                            id="command-input"
+                            type="text"
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && handleExecute()}
+                            placeholder="Speak or type in English, हिंदी, or ಕನ್ನಡ..."
+                            className="flex-1 h-11 px-3.5 rounded-md border border-[#E8E4DF] bg-white text-[#1A1A1A] text-sm placeholder-[#6B6B6B]/60 focus:outline-none focus:border-[#B8860B] focus:ring-2 focus:ring-[#B8860B]"
+                          />
+                          <SerifButton
+                            variant="primary"
+                            size="md"
+                            onClick={() => handleExecute()}
+                            disabled={isStreaming}
+                            className="shrink-0">
+                            {isStreaming ? (
+                              <>
+                                <i className="fa-solid fa-circle-notch fa-spin mr-1.5"></i>
+                                <span>Running</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>Execute</span>
+                                <i className="fa-solid fa-arrow-right ml-1.5 text-xs"></i>
+                              </>
+                            )}
+                          </SerifButton>
+                        </div>
+                      </div>
+
+                      {/* 2x2 One-Click Preset Actions Grid */}
+                      <div className="pt-2 border-t border-[#E8E4DF]">
+                        <span className="small-caps text-[#6B6B6B] block mb-2">
+                          One-Click Store Workflows
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {[
+                            { icon: "fa-phone", label: "Call Supplier (CALL-E)", cmd: "Call supplier via CALL-E to place reorder for low stock items." },
+                            { icon: "fa-paper-plane", label: "Telegram Dues Reminders", cmd: "Send payment reminders for overdue customer dues." },
+                            { icon: "fa-bullhorn", label: "Weekend Promo Campaign", cmd: "Run a weekend campaign for my shop." },
+                            { icon: "fa-chart-simple", label: "Today's DB Sales Status", cmd: "What were my sales today?" }
+                          ].map((item, i) => (
+                            <button
+                              key={i}
+                              onClick={() => {
+                                setPrompt(item.cmd);
+                                handleExecute(item.cmd);
+                              }}
+                              className="serif-focus text-left px-3 py-2.5 rounded-md border border-[#E8E4DF] bg-[#FAFAF8] hover:bg-white hover:border-[#B8860B] transition-all duration-150 flex items-center space-x-2.5 group">
+                              <i className={`fa-solid ${item.icon} text-xs text-[#B8860B] shrink-0`}></i>
+                              <span className="text-xs font-medium text-[#1A1A1A] group-hover:text-[#B8860B] truncate">
+                                {item.label}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </SerifCard>
+
+                  {/* 2. DYNAMIC APPROVAL CHECKPOINT CARD (Appears prominently when WAITING_APPROVAL) */}
+                  {sessionStatus === "WAITING_APPROVAL" && pendingApproval && (
+                    <SerifCard
+                      featured={true}
+                      label="Action Gated • Human Authorization Required"
+                      title={pendingApproval.action_title}
+                      headerRight={
+                        <span className="small-caps bg-[#B8860B] text-white px-2.5 py-0.5 rounded">
+                          Awaiting Decision
+                        </span>
+                      }>
+                      <div className="space-y-4">
+                        <div className="bg-white rounded-md p-3.5 border border-[#E8E4DF] space-y-2.5 text-xs">
+                          <div>
+                            <span className="small-caps text-[#6B6B6B] block">Operational Rationale</span>
+                            <p className="text-sm text-[#1A1A1A] mt-0.5">{pendingApproval.rationale}</p>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#E8E4DF]">
+                            <div>
+                              <span className="small-caps text-[#6B6B6B] block">Estimated Value</span>
+                              <span className="font-display text-xl font-bold text-[#B8860B]">
+                                ₹{pendingApproval.estimated_cost?.toLocaleString()}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="small-caps text-[#6B6B6B] block">Execution Channel</span>
+                              <span className="font-mono text-xs text-[#1A1A1A] font-semibold">
+                                n8n Cloud Automation
+                              </span>
+                            </div>
+                          </div>
+                          <div className="pt-2 border-t border-[#E8E4DF]">
+                            <span className="small-caps text-[#6B6B6B] block">External System Effect</span>
+                            <p className="font-mono text-[11px] text-[#1A1A1A] mt-0.5">{pendingApproval.external_effect}</p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <SerifButton variant="secondary" size="md" onClick={() => handleApproval("deny")}>
+                            <i className="fa-solid fa-xmark mr-1.5"></i>
+                            <span>Deny / Cancel</span>
+                          </SerifButton>
+                          <SerifButton variant="primary" size="md" onClick={() => handleApproval("allow")}>
+                            <i className="fa-solid fa-check mr-1.5"></i>
+                            <span>Approve &amp; Execute</span>
+                          </SerifButton>
+                        </div>
+
+                        <SerifButton variant="outline" size="sm" onClick={handleVoiceToggle} className="w-full">
+                          <i className="fa-solid fa-microphone text-[#B8860B] mr-2"></i>
+                          <span>{isListening ? "Listening... Say 'Approve' or 'Deny'!" : "Or Speak: Say 'Approve' or 'Deny'"}</span>
+                        </SerifButton>
+                      </div>
+                    </SerifCard>
+                  )}
+
+                  {/* 3. STORE OPERATIONS STANDING CARD */}
+                  <SerifCard
+                    label="Store Operations Checklist"
+                    title="Daily Standing & Readiness"
+                    bodyClassName="p-4 sm:p-5">
+                    <div className="divide-y divide-[#E8E4DF] text-xs">
+                      {[
+                        { label: "Live Sales & Cash Reconciled", badge: "Zero Variance", icon: "fa-check-circle" },
+                        { label: "MilkyWay Dairy Supplier Order", badge: "Cutoff 20:00", icon: "fa-clock" },
+                        { label: "Customer Dues (Priya & Vikram)", badge: "₹4,250 Overdue", icon: "fa-receipt" },
+                        { label: "Weekend Campaign Engine", badge: "142 Shoppers", icon: "fa-users" }
+                      ].map((row, idx) => (
+                        <div key={idx} className="py-2.5 flex items-center justify-between gap-2">
+                          <span className="text-[#1A1A1A] font-medium flex items-center space-x-2">
+                            <i className={`fa-solid ${row.icon} text-[#B8860B] w-4`}></i>
+                            <span>{row.label}</span>
+                          </span>
+                          <span className="font-mono text-[11px] text-[#B8860B] font-semibold bg-[#F5F3F0] px-2 py-0.5 rounded border border-[#E8E4DF]">
+                            {row.badge}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </SerifCard>
+                </div>
+
+                {/* ===============================================================
+                    RIGHT COLUMN (7 COLS): LIVE EXECUTION & OUTCOME DISPLAY
+                    Sits directly side-by-side with the Command Deck!
+                   =============================================================== */}
+                <div className="lg:col-span-7 flex flex-col space-y-5">
+
+                  <SerifCard
+                    accentTop={true}
+                    elevated={true}
+                    label="Step 2 • Live Execution & Spoken Output"
+                    title="Real-Time Agent Turn Display"
+                    headerRight={
+                      <div className="flex items-center space-x-2">
+                        {activeAgentStep && (
+                          <span className="hidden sm:inline-flex items-center space-x-1.5 text-xs font-mono text-[#B8860B] bg-[rgba(184,134,11,0.08)] px-2.5 py-1 rounded border border-[#B8860B]/30">
+                            <i className="fa-solid fa-bolt text-[10px]"></i>
+                            <span className="truncate max-w-[220px]">{activeAgentStep}</span>
+                          </span>
+                        )}
+                        <span className={`small-caps px-2.5 py-1 rounded border ${
+                          sessionStatus === "RUNNING" || sessionStatus === "EXECUTING"
+                            ? "bg-[#B8860B] text-white border-[#B8860B]"
+                            : sessionStatus === "WAITING_APPROVAL"
+                            ? "bg-[#1A1A1A] text-[#D4A84B] border-[#1A1A1A]"
+                            : sessionStatus === "COMPLETED"
+                            ? "bg-[#F5F3F0] text-[#B8860B] border-[#B8860B]"
+                            : "bg-[#F5F3F0] text-[#6B6B6B] border-[#E8E4DF]"
+                        }`}>
+                          {sessionStatus}
+                        </span>
+                      </div>
+                    }
+                    bodyClassName="p-5 sm:p-6 space-y-5">
+
+                    {/* Pinned Spoken Response / Active Voice Banner at Top of Live Display */}
+                    {activeDisplayTranscript && (
+                      <GoldPullQuote
+                        compact={true}
+                        quote={activeDisplayTranscript}
+                        attribution={
+                          isListening
+                            ? "Listening to Microphone"
+                            : isSpeaking
+                            ? "OperatorOS Speaking Now"
+                            : "Latest Spoken Output"
+                        }
+                        onReplay={
+                          lastSpokenEvent?.voice_text
+                            ? () => enqueueVoiceNarration(lastSpokenEvent.voice_text, true)
+                            : null
+                        }
+                      />
+                    )}
+
+                    {/* Verified Outcome Summary Banner when COMPLETED */}
+                    {sessionStatus === "COMPLETED" && (
+                      <div className="rounded-lg p-4 bg-[rgba(184,134,11,0.08)] border border-[#B8860B] flex flex-wrap items-center justify-between gap-4">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-9 h-9 rounded-full bg-[#B8860B] text-white flex items-center justify-center shrink-0">
+                            <i className="fa-solid fa-check"></i>
+                          </div>
+                          <div>
+                            <h3 className="font-display font-semibold text-base text-[#1A1A1A]">
+                              Action Executed &amp; Verified in SQLite + n8n Cloud
+                            </h3>
+                            <p className="text-xs text-[#6B6B6B] font-mono">
+                              Safe Drop: ₹{safeDropAmt.toLocaleString()} • Float Retained: ₹{targetFloat.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                        <SerifButton
+                          variant="outline"
+                          size="xs"
+                          onClick={() => {
+                            setActiveTab("spreadsheet");
+                            fetchSpreadsheet();
+                          }}>
+                          <span>View Ledger Row →</span>
+                        </SerifButton>
+                      </div>
+                    )}
+
+                    {/* Live Event Stream Container */}
+                    <div className="border border-[#E8E4DF] rounded-lg bg-[#FAFAF8] p-4 max-h-[460px] overflow-y-auto custom-scroll space-y-3">
+                      {events.length === 0 ? (
+                        <div className="py-12 px-4 text-center space-y-3">
+                          <div className="w-12 h-12 rounded-full bg-white border border-[#E8E4DF] text-[#B8860B] flex items-center justify-center mx-auto shadow-sm">
+                            <i className="fa-solid fa-wand-magic-sparkles text-lg"></i>
+                          </div>
+                          <h3 className="font-display text-lg font-semibold text-[#1A1A1A]">
+                            Live Execution Display Ready
+                          </h3>
+                          <p className="text-xs text-[#6B6B6B] max-w-md mx-auto leading-relaxed">
+                            Click <strong>Execute</strong> or tap any workflow on the left. Every TrueForge subagent thread, Daytona sandbox calculation, MCP tool call, and approval checkpoint will stream here in real time.
+                          </p>
+                        </div>
+                      ) : (
+                        events.map((evt, idx) => {
+                          if (evt.type === "turn.created") {
+                            return (
+                              <div key={idx} className="bg-white border border-[#E8E4DF] px-3.5 py-2 rounded-md text-xs font-mono flex items-center justify-between">
+                                <span className="text-[#6B6B6B]">Turn Initialized • {evt.turn_id}</span>
+                                <span className="text-[#B8860B] font-semibold">intent: {evt.intent || "running"}</span>
+                              </div>
+                            );
+                          }
+
+                          if (evt.type === "mcp.initialize") {
+                            return (
+                              <div key={idx} className="bg-white border border-[#E8E4DF] px-3.5 py-2 rounded-md text-xs font-mono flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-[#1A1A1A] font-medium">
+                                  <i className="fa-solid fa-plug-circle-check text-[#B8860B] mr-2"></i>
+                                  TrueForge MCP Gateway Initialized
+                                </span>
+                                <span className="text-[#6B6B6B] text-[11px]">business-ops • cognee-memory • n8n-cloud</span>
+                              </div>
+                            );
+                          }
+
+                          if (evt.type === "sandbox.created") {
+                            return (
+                              <div key={idx} className="bg-[rgba(184,134,11,0.08)] border border-[#B8860B]/40 px-3.5 py-2 rounded-md text-xs font-mono flex items-center justify-between">
+                                <span className="text-[#1A1A1A] font-medium">
+                                  <i className="fa-solid fa-microchip text-[#B8860B] mr-2"></i>
+                                  {evt.provider || "Daytona Cloud Sandbox"} • {evt.mode || "Code Mode"}
+                                </span>
+                                <span className="text-[#B8860B]">{evt.sandbox_id}</span>
+                              </div>
+                            );
+                          }
+
+                          if (evt.type === "thread.created") {
+                            return (
+                              <div key={idx} className="bg-white border-l-4 border-l-[#B8860B] border border-[#E8E4DF] px-3.5 py-2 rounded-md text-xs font-mono flex items-center justify-between">
+                                <span className="text-[#1A1A1A]">
+                                  <i className="fa-solid fa-code-branch text-[#B8860B] mr-2"></i>
+                                  Subagent Thread: <strong>{evt.title}</strong>
+                                </span>
+                                <span className="text-[#B8860B] uppercase text-[11px]">running</span>
+                              </div>
+                            );
+                          }
+
+                          if (evt.type === "thread.done") {
+                            return (
+                              <div key={idx} className="bg-white border border-[#E8E4DF] px-3.5 py-2 rounded-md text-xs font-mono flex items-center justify-between">
+                                <span className="text-[#1A1A1A]">
+                                  <i className="fa-solid fa-circle-check text-[#B8860B] mr-2"></i>
+                                  <strong>{evt.title}:</strong> {evt.summary}
+                                </span>
+                                <span className="text-[#6B6B6B] text-[11px]">done</span>
+                              </div>
+                            );
+                          }
+
+                          if (evt.type === "model.message.delta") {
+                            return (
+                              <div key={idx} className="bg-white border border-[#E8E4DF] border-l-4 border-l-[#1A1A1A] p-3.5 rounded-md text-xs space-y-1.5 shadow-sm">
+                                <div className="flex items-center justify-between">
+                                  <span className="small-caps text-[#1A1A1A]">
+                                    <i className="fa-solid fa-message text-[#B8860B] mr-1.5"></i>
+                                    Operator Spoken Narration
+                                  </span>
+                                  {evt.voice_text && (
+                                    <button
+                                      onClick={() => enqueueVoiceNarration(evt.voice_text, true)}
+                                      className="text-[11px] font-mono text-[#B8860B] hover:underline">
+                                      <i className="fa-solid fa-volume-high mr-1"></i>Replay
+                                    </button>
+                                  )}
+                                </div>
+                                <p className="text-sm text-[#1A1A1A] leading-relaxed whitespace-pre-wrap">{evt.content}</p>
+                              </div>
+                            );
+                          }
+
+                          if (evt.type === "agent.question_required") {
+                            return (
+                              <div key={idx} className="bg-white border-2 border-[#B8860B] p-4 rounded-lg space-y-3 shadow-sm">
+                                <div className="flex items-center justify-between">
+                                  <span className="small-caps text-[#B8860B]">Interactive Question</span>
+                                  <span className="font-mono text-[10px] bg-[#B8860B] text-white px-2 py-0.5 rounded">Select Option</span>
+                                </div>
+                                <p className="font-display font-semibold text-base text-[#1A1A1A]">{evt.question}</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                  {evt.channel_options?.map((opt) => (
+                                    <button
+                                      key={opt.id}
+                                      onClick={() => handleInteractiveResponse(`${opt.label} with 15% discount`)}
+                                      className="serif-focus p-3 rounded-md bg-[#FAFAF8] border border-[#E8E4DF] hover:border-[#B8860B] text-left transition-all">
+                                      <p className="font-semibold text-xs text-[#1A1A1A]">{opt.label}</p>
+                                      <p className="font-mono text-[10px] text-[#B8860B] mt-0.5">{opt.badge}</p>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          if (evt.type === "tool.call") {
+                            return (
+                              <div key={idx} className="bg-white border border-[#E8E4DF] p-3 rounded-md text-xs space-y-1.5">
+                                <div className="flex items-center justify-between font-mono">
+                                  <span className="text-[#1A1A1A] font-semibold">
+                                    <i className="fa-solid fa-wrench text-[#B8860B] mr-1.5 text-[10px]"></i>
+                                    tool: {evt.tool_name}
+                                  </span>
+                                  <span className="text-[10px] text-[#6B6B6B]">{evt.id}</span>
+                                </div>
+                                {evt.arguments && (
+                                  <pre className="bg-[#F5F3F0] p-2.5 rounded text-[11px] text-[#1A1A1A] overflow-x-auto border border-[#E8E4DF]">
+                                    {JSON.stringify(evt.arguments, null, 2)}
+                                  </pre>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          if (evt.type === "tool.response") {
+                            const isSandbox = evt.content?.sandbox_executed;
+                            return (
+                              <div key={idx} className="bg-white border border-[#E8E4DF] p-3 rounded-md text-xs space-y-1.5">
+                                <div className="flex items-center justify-between font-mono">
+                                  <span className="text-[#B8860B] font-semibold">
+                                    <i className="fa-solid fa-check mr-1.5 text-[10px]"></i>
+                                    response: {evt.tool_call_id}
+                                  </span>
+                                  {isSandbox && (
+                                    <span className="bg-[#F5F3F0] text-[#B8860B] px-2 py-0.5 rounded text-[10px] border border-[#E8E4DF]">
+                                      TrueForge Sandbox ({evt.content.execution_time_ms}ms)
+                                    </span>
+                                  )}
+                                </div>
+                                {isSandbox ? (
+                                  <pre className="bg-[#1A1A1A] text-[#FAFAF8] p-2.5 rounded text-[11px] font-mono overflow-x-auto">
+                                    {evt.content.stdout}
+                                  </pre>
+                                ) : (
+                                  <pre className="bg-[#FAFAF8] p-2.5 rounded text-[11px] text-[#6B6B6B] font-mono overflow-x-auto border border-[#E8E4DF] max-h-32">
+                                    {JSON.stringify(evt.content, null, 2)}
+                                  </pre>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          if (evt.type === "tool.approval_required") {
+                            return (
+                              <div key={idx} className="bg-[rgba(184,134,11,0.08)] border-2 border-[#B8860B] p-4 rounded-lg text-xs space-y-2.5">
+                                <div className="flex items-center justify-between">
+                                  <span className="small-caps text-[#B8860B] font-bold">
+                                    <i className="fa-solid fa-hand mr-1.5"></i>
+                                    Human Approval Checkpoint
+                                  </span>
+                                  <span className="font-mono text-[10px] bg-[#B8860B] text-white px-2 py-0.5 rounded">
+                                    Approval Required
+                                  </span>
+                                </div>
+                                <p className="font-display italic text-sm text-[#1A1A1A]">
+                                  &ldquo;{evt.voice_text}&rdquo;
+                                </p>
+                                {/* Direct Inline Approve/Deny buttons right inside the stream too! */}
+                                {sessionStatus === "WAITING_APPROVAL" && (
+                                  <div className="flex items-center gap-2 pt-1">
+                                    <SerifButton variant="primary" size="xs" onClick={() => handleApproval("allow")}>
+                                      <i className="fa-solid fa-check mr-1"></i>Approve &amp; Execute
+                                    </SerifButton>
+                                    <SerifButton variant="secondary" size="xs" onClick={() => handleApproval("deny")}>
+                                      <i className="fa-solid fa-xmark mr-1"></i>Deny
+                                    </SerifButton>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          return null;
+                        })
+                      )}
+                      <div ref={eventEndRef} />
+                    </div>
+
+                    {/* Live Recent Spreadsheet Feed (Side-by-Side Proof of Execution) */}
+                    <div className="pt-2 border-t border-[#E8E4DF]">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="small-caps text-[#6B6B6B]">
+                          Latest Synced Spreadsheet Rows ({spreadsheetRows.length} Total)
+                        </span>
+                        <button
+                          onClick={() => { setActiveTab("spreadsheet"); fetchSpreadsheet(); }}
+                          className="text-xs font-mono text-[#B8860B] hover:underline">
+                          Open Full Spreadsheet →
+                        </button>
+                      </div>
+                      <div className="border border-[#E8E4DF] rounded-md bg-white overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-[#F5F3F0] border-b border-[#E8E4DF] font-mono text-[10px] uppercase text-[#6B6B6B]">
+                              <th className="py-1.5 px-2.5">Time</th>
+                              <th className="py-1.5 px-2.5">Branch</th>
+                              <th className="py-1.5 px-2.5">Target</th>
+                              <th className="py-1.5 px-2.5 text-right">Amount</th>
+                              <th className="py-1.5 px-2.5">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#E8E4DF] font-mono text-[11px]">
+                            {spreadsheetRows.slice(0, 3).map((row, idx) => {
+                              const branch = row.Branch_Executed || row.Action_Type || "ACTION";
+                              return (
+                                <tr key={idx} className="hover:bg-[#FAFAF8]">
+                                  <td className="py-1.5 px-2.5 text-[#6B6B6B]">
+                                    {row.Timestamp ? new Date(row.Timestamp).toLocaleTimeString() : "—"}
+                                  </td>
+                                  <td className="py-1.5 px-2.5 font-semibold text-[#B8860B]">{branch}</td>
+                                  <td className="py-1.5 px-2.5 font-sans text-[#1A1A1A] truncate max-w-[160px]">
+                                    {row.Counterparty || row.Target_Recipient}
+                                  </td>
+                                  <td className="py-1.5 px-2.5 text-right font-semibold text-[#1A1A1A]">
+                                    ₹{Number(row.Amount_INR || 0).toLocaleString()}
+                                  </td>
+                                  <td className="py-1.5 px-2.5 text-[#6B6B6B]">
+                                    {row.External_Status || row.Status}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </SerifCard>
+                </div>
+              </main>
+
+            ) : activeTab === "spreadsheet" ? (
+              /* =================================================================
+                 TAB 2: LIVE SPREADSHEET LEDGER
+                 ================================================================= */
+              <SerifCard
+                accentTop={true}
+                label="CSV & Google Sheets Sync"
+                title="Live Store Operations Spreadsheet Ledger"
+                subtitle="Every approved n8n branch action (PURCHASE_ORDER, PAYMENT_REMINDER, CAMPAIGN_BROADCAST) and live sale is logged here."
+                headerRight={
+                  <div className="flex flex-wrap items-center gap-2">
+                    <SerifButton variant="secondary" size="xs" onClick={() => recordLiveSale(1250, "UPI")}>
+                      <i className="fa-solid fa-plus mr-1.5"></i>
+                      <span>Record +₹1,250 Sale Row</span>
+                    </SerifButton>
+                    <a
+                      href="/api/spreadsheet/download"
+                      download="operator_ledger_spreadsheet.csv"
+                      className="serif-focus min-h-[34px] px-3.5 py-1 rounded-md bg-[#B8860B] hover:bg-[#D4A84B] text-white text-xs font-semibold inline-flex items-center">
+                      <i className="fa-solid fa-file-csv mr-1.5"></i>
+                      <span>Download .CSV</span>
+                    </a>
+                    <SerifButton variant="outline" size="xs" onClick={fetchSpreadsheet}>
+                      <i className="fa-solid fa-arrows-rotate mr-1"></i>
+                      <span>Refresh</span>
+                    </SerifButton>
+                  </div>
+                }>
+                <div className="overflow-x-auto border border-[#E8E4DF] rounded-md">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-[#E8E4DF] bg-[#F5F3F0] small-caps text-[#6B6B6B]">
+                        <th className="py-3 px-3.5">Timestamp</th>
+                        <th className="py-3 px-3.5">Action Branch</th>
+                        <th className="py-3 px-3.5">Target / Recipient</th>
+                        <th className="py-3 px-3.5">Summary</th>
+                        <th className="py-3 px-3.5 text-right">Amount (INR)</th>
+                        <th className="py-3 px-3.5">Channel</th>
+                        <th className="py-3 px-3.5">Status</th>
+                        <th className="py-3 px-3.5">Ref ID</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#E8E4DF] font-mono">
+                      {spreadsheetRows.length === 0 ? (
+                        <tr>
+                          <td colSpan="8" className="py-10 text-center font-sans text-sm text-[#6B6B6B]">
+                            No spreadsheet rows logged yet. Execute a Supplier Call, Payment Reminder, Campaign, or click &ldquo;+₹1,250 Sale Row&rdquo;.
+                          </td>
+                        </tr>
+                      ) : (
+                        spreadsheetRows.map((row, idx) => {
+                          const branch = row.Branch_Executed || row.Action_Type || "ACTION";
+                          return (
+                            <tr key={idx} className="hover:bg-[#F5F3F0]/50">
+                              <td className="py-2.5 px-3.5 text-[#6B6B6B]">
+                                {row.Timestamp ? new Date(row.Timestamp).toLocaleTimeString() : "-"}
+                              </td>
+                              <td className="py-2.5 px-3.5">
+                                <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[rgba(184,134,11,0.1)] text-[#B8860B] border border-[#B8860B]/30">
+                                  {branch}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3.5 font-sans font-semibold text-[#1A1A1A]">
+                                {row.Counterparty || row.Target_Recipient}
+                              </td>
+                              <td className="py-2.5 px-3.5 font-sans text-[#6B6B6B] max-w-md">
+                                {row.Details || row.Items_Or_Summary}
+                              </td>
+                              <td className="py-2.5 px-3.5 font-bold text-[#1A1A1A] text-right">
+                                ₹{Number(row.Amount_INR || 0).toLocaleString()}
+                              </td>
+                              <td className="py-2.5 px-3.5 text-[#6B6B6B]">
+                                {row.Phone || row.Channel || "-"}
+                              </td>
+                              <td className="py-2.5 px-3.5 text-[#B8860B] font-semibold">
+                                {row.External_Status || row.Status}
+                              </td>
+                              <td className="py-2.5 px-3.5 text-[#6B6B6B] text-[10px]">
+                                {row.Reference_No || row.External_Ref_ID}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </SerifCard>
+
+            ) : activeTab === "integrations" ? (
+              /* =================================================================
+                 TAB 3: N8N MULTI-BRANCH + CALL-E + TELEGRAM SETUP
+                 ================================================================= */
+              <div className="space-y-6">
+                <SerifCard
+                  accentTop={true}
+                  label="Multi-Branch Switch Router"
+                  title="n8n Cloud Workflow & Direct Integrations"
+                  subtitle={`Webhook: ${integrationConfig.n8n_webhook_url || "https://sufiyan799.app.n8n.cloud/webhook/execute-business-action"}`}
+                  headerRight={
+                    <a
+                      href="/api/n8n/workflow-json"
+                      download="operator_os_n8n_cloud_import.json"
+                      className="serif-focus min-h-[36px] px-4 py-1.5 rounded-md bg-[#B8860B] hover:bg-[#D4A84B] text-white text-xs font-semibold inline-flex items-center">
+                      <i className="fa-solid fa-download mr-1.5"></i>
+                      <span>Download Multi-Branch n8n JSON</span>
+                    </a>
+                  }>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                    <div className="p-4 rounded-lg bg-[#FAFAF8] border border-[#E8E4DF] space-y-2">
+                      <div className="flex items-center justify-between font-mono font-semibold text-[#B8860B]">
+                        <span>Branch 0: PURCHASE_ORDER</span>
+                        <i className="fa-solid fa-phone-volume"></i>
+                      </div>
+                      <p className="text-[#1A1A1A]">Triggered when closing shop or ordering low stock.</p>
+                      <ul className="text-[#6B6B6B] space-y-1 list-disc list-inside">
+                        <li><strong>CALL-E Voice Call</strong>: Calls supplier via API and dictates reorder items.</li>
+                        <li><strong>Spreadsheet</strong>: Appends PO row to Google Sheets &amp; CSV.</li>
+                      </ul>
+                    </div>
+
+                    <div className="p-4 rounded-lg bg-[#FAFAF8] border border-[#E8E4DF] space-y-2">
+                      <div className="flex items-center justify-between font-mono font-semibold text-[#B8860B]">
+                        <span>Branch 1: PAYMENT_REMINDER</span>
+                        <i className="fa-brands fa-telegram"></i>
+                      </div>
+                      <p className="text-[#1A1A1A]">Triggered when sending overdue customer reminders.</p>
+                      <ul className="text-[#6B6B6B] space-y-1 list-disc list-inside">
+                        <li><strong>Telegram Bot API</strong>: Sends UPI link &amp; customer breakdown.</li>
+                        <li><strong>Spreadsheet</strong>: Appends audit row to <code className="font-mono">PaymentReminders</code>.</li>
+                      </ul>
+                    </div>
+
+                    <div className="p-4 rounded-lg bg-[#FAFAF8] border border-[#E8E4DF] space-y-2">
+                      <div className="flex items-center justify-between font-mono font-semibold text-[#B8860B]">
+                        <span>Branch 2: CAMPAIGN_BROADCAST</span>
+                        <i className="fa-solid fa-bullhorn"></i>
+                      </div>
+                      <p className="text-[#1A1A1A]">Triggered when running a weekend store campaign.</p>
+                      <ul className="text-[#6B6B6B] space-y-1 list-disc list-inside">
+                        <li><strong>Telegram Broadcast</strong>: Dispatches offer + coupon + ROI projection.</li>
+                        <li><strong>Spreadsheet</strong>: Logs campaign metrics to <code className="font-mono">Campaigns</code>.</li>
+                      </ul>
+                    </div>
+                  </div>
+                </SerifCard>
+
+                <SerifCard
+                  accentTop={true}
+                  label="API Keys & 1-Click Test Triggers"
+                  title="Live Integration Credentials"
+                  headerRight={
+                    <div className="flex flex-wrap items-center gap-2">
+                      <SerifButton variant="outline" size="xs" onClick={triggerTestCalle}>
+                        <i className="fa-solid fa-phone mr-1.5 text-[#B8860B]"></i>
+                        <span>Test CALL-E Supplier Call</span>
+                      </SerifButton>
+                      <SerifButton variant="outline" size="xs" onClick={triggerTestTelegram}>
+                        <i className="fa-brands fa-telegram mr-1.5 text-[#B8860B]"></i>
+                        <span>Test Telegram Reminder</span>
+                      </SerifButton>
+                      <SerifButton variant="primary" size="xs" onClick={saveIntegrationsConfig}>
+                        <i className="fa-solid fa-floppy-disk mr-1.5"></i>
+                        <span>Save Keys</span>
+                      </SerifButton>
+                    </div>
+                  }>
+                  {integrationStatusMsg && (
+                    <div className="mb-4 p-3 rounded-md bg-[rgba(184,134,11,0.1)] border border-[#B8860B]/40 text-xs font-mono text-[#1A1A1A]">
+                      {integrationStatusMsg}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                    <div className="space-y-1 md:col-span-2">
+                      <label className="font-semibold text-[#1A1A1A] flex items-center justify-between">
+                        <span>Sarvam AI API Key (Multilingual STT <code className="font-mono">saaras:v3</code>, TTS <code className="font-mono">bulbul:v3</code> &amp; Translate <code className="font-mono">mayura:v1</code> — Auto-failover enabled)</span>
+                        {integrationConfig.sarvam_configured && <span className="font-mono text-[10px] text-[#B8860B]">Configured ({integrationConfig.sarvam_api_key_masked})</span>}
+                      </label>
+                      <input
+                        type="password"
+                        value={integrationConfig.sarvam_api_key}
+                        onChange={(e) => setIntegrationConfig({ ...integrationConfig, sarvam_api_key: e.target.value })}
+                        placeholder="Paste Sarvam AI Subscription Key (sk_...) to hot-swap anytime without restarting..."
+                        className="w-full h-10 px-3 rounded-md border border-[#E8E4DF] bg-white font-mono text-xs text-[#1A1A1A] focus:outline-none focus:border-[#B8860B]"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="font-semibold text-[#1A1A1A] flex items-center justify-between">
+                        <span>CALL-E API Key (<a href="https://dashboard.heycall-e.com/assistant/new" target="_blank" className="text-[#B8860B] underline">dashboard.heycall-e.com</a>)</span>
+                        {integrationConfig.calle_configured && <span className="font-mono text-[10px] text-[#B8860B]">Configured ({integrationConfig.calle_api_key_masked})</span>}
+                      </label>
+                      <input
+                        type="password"
+                        value={integrationConfig.calle_api_key}
+                        onChange={(e) => setIntegrationConfig({ ...integrationConfig, calle_api_key: e.target.value })}
+                        placeholder="Paste Bearer API Key from CALL-E dashboard..."
+                        className="w-full h-10 px-3 rounded-md border border-[#E8E4DF] bg-white font-mono text-xs text-[#1A1A1A] focus:outline-none focus:border-[#B8860B]"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="font-semibold text-[#1A1A1A] block">Supplier Phone Number (E.164 format)</label>
+                      <input
+                        type="text"
+                        value={integrationConfig.supplier_phone_number}
+                        onChange={(e) => setIntegrationConfig({ ...integrationConfig, supplier_phone_number: e.target.value })}
+                        placeholder="+919876543210"
+                        className="w-full h-10 px-3 rounded-md border border-[#E8E4DF] bg-white font-mono text-xs text-[#1A1A1A] focus:outline-none focus:border-[#B8860B]"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="font-semibold text-[#1A1A1A] flex items-center justify-between">
+                        <span>Telegram Bot Token (@BotFather)</span>
+                        {integrationConfig.telegram_configured && <span className="font-mono text-[10px] text-[#B8860B]">Configured ({integrationConfig.telegram_bot_token_masked})</span>}
+                      </label>
+                      <input
+                        type="password"
+                        value={integrationConfig.telegram_bot_token}
+                        onChange={(e) => setIntegrationConfig({ ...integrationConfig, telegram_bot_token: e.target.value })}
+                        placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz..."
+                        className="w-full h-10 px-3 rounded-md border border-[#E8E4DF] bg-white font-mono text-xs text-[#1A1A1A] focus:outline-none focus:border-[#B8860B]"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="font-semibold text-[#1A1A1A] block">Telegram Chat ID</label>
+                      <input
+                        type="text"
+                        value={integrationConfig.telegram_chat_id}
+                        onChange={(e) => setIntegrationConfig({ ...integrationConfig, telegram_chat_id: e.target.value })}
+                        placeholder="e.g. 987654321"
+                        className="w-full h-10 px-3 rounded-md border border-[#E8E4DF] bg-white font-mono text-xs text-[#1A1A1A] focus:outline-none focus:border-[#B8860B]"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="font-semibold text-[#1A1A1A] block">n8n Cloud Multi-Branch Webhook URL</label>
+                      <input
+                        type="text"
+                        value={integrationConfig.n8n_webhook_url}
+                        onChange={(e) => setIntegrationConfig({ ...integrationConfig, n8n_webhook_url: e.target.value })}
+                        placeholder="https://sufiyan799.app.n8n.cloud/webhook/execute-business-action"
+                        className="w-full h-10 px-3 rounded-md border border-[#E8E4DF] bg-white font-mono text-xs text-[#1A1A1A] focus:outline-none focus:border-[#B8860B]"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="font-semibold text-[#1A1A1A] block">Google Sheet ID</label>
+                      <input
+                        type="text"
+                        value={integrationConfig.google_sheet_id}
+                        onChange={(e) => setIntegrationConfig({ ...integrationConfig, google_sheet_id: e.target.value })}
+                        placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
+                        className="w-full h-10 px-3 rounded-md border border-[#E8E4DF] bg-white font-mono text-xs text-[#1A1A1A] focus:outline-none focus:border-[#B8860B]"
+                      />
+                    </div>
+                  </div>
+                </SerifCard>
+              </div>
+
+            ) : (
+              /* =================================================================
+                 TAB 4: AUDIT LOG & DB TRAIL
+                 ================================================================= */
+              <SerifCard
+                accentTop={true}
+                label="Immutable SQLite Ledger"
+                title="Persistent Audit Trail"
+                headerRight={
+                  <SerifButton variant="outline" size="xs" onClick={fetchAudit}>
+                    <i className="fa-solid fa-arrows-rotate mr-1"></i>
+                    <span>Refresh</span>
+                  </SerifButton>
+                }>
+                <div className="overflow-x-auto border border-[#E8E4DF] rounded-md">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-[#E8E4DF] bg-[#F5F3F0] small-caps text-[#6B6B6B]">
+                        <th className="py-3 px-3.5">Time</th>
+                        <th className="py-3 px-3.5">Source</th>
+                        <th className="py-3 px-3.5">Event Type</th>
+                        <th className="py-3 px-3.5">Summary</th>
+                        <th className="py-3 px-3.5">Details</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#E8E4DF] font-mono">
+                      {auditLogs.map((log, idx) => (
+                        <tr key={log.id || idx} className="hover:bg-[#F5F3F0]/50">
+                          <td className="py-2.5 px-3.5 text-[#6B6B6B]">
+                            {new Date(log.timestamp).toLocaleTimeString()}
+                          </td>
+                          <td className="py-2.5 px-3.5">
+                            <span className="px-2 py-0.5 rounded bg-[#F5F3F0] text-[#1A1A1A] border border-[#E8E4DF] text-[10px]">
+                              {log.source}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3.5 text-[#B8860B] font-semibold">
+                            {log.event_type}
+                          </td>
+                          <td className="py-2.5 px-3.5 font-sans text-[#1A1A1A]">
+                            {log.summary}
+                          </td>
+                          <td className="py-2.5 px-3.5 text-[10px] text-[#6B6B6B] max-w-xs truncate">
+                            {JSON.stringify(log.details)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </SerifCard>
+            )}
+          </div>
+
+          {/* =========================================================================
+              4. FULLSCREEN DUPLEX VOICE HUD OVERLAY
+             ========================================================================= */}
+          {voiceModeOpen && (
+            <div className="fixed inset-0 z-50 bg-[#FAFAF8] paper-texture ambient-gold-glow flex flex-col justify-between p-6 sm:p-10 overflow-y-auto">
+              <div className="max-w-4xl mx-auto w-full flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[#E8E4DF]">
+                <div>
+                  <span className="small-caps text-[#B8860B] block">
+                    Continuous Hands-Free Turn-Taking
+                  </span>
+                  <h2 className="font-display text-2xl font-bold text-[#1A1A1A]">
+                    OperatorOS Live Voice Mode
+                  </h2>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <SerifButton
+                    variant="secondary"
+                    size="xs"
+                    active={handsFreeMode}
+                    onClick={() => setHandsFreeMode(!handsFreeMode)}>
+                    <i className="fa-solid fa-arrows-spin mr-1.5 text-[#B8860B]"></i>
+                    <span>Hands-Free Auto-Listen: {handsFreeMode ? "ON" : "OFF"}</span>
+                  </SerifButton>
+
+                  <SerifButton
+                    variant="outline"
+                    size="xs"
+                    onClick={() => {
+                      setVoiceModeOpen(false);
+                      voiceModeOpenRef.current = false;
+                      stopSpeaking();
+                    }}>
+                    <span>Close ✕</span>
+                  </SerifButton>
+                </div>
+              </div>
+
+              <div className="max-w-3xl mx-auto w-full my-auto py-6 space-y-6 text-center">
+                <div className="relative flex items-center justify-center py-4">
+                  <div className={`absolute w-56 h-56 rounded-full border transition-all duration-200 ${
+                    isListening ? "border-[#B8860B]/50 scale-105" : "border-[#E8E4DF]"
+                  }`} />
+                  <div className={`absolute w-44 h-44 rounded-full border transition-all duration-200 ${
+                    isListening || isSpeaking ? "border-[#B8860B]/60 bg-[rgba(184,134,11,0.05)]" : "border-[#E8E4DF]"
+                  }`} />
+
+                  <button
+                    onClick={handleVoiceToggle}
+                    className={`serif-focus relative z-10 w-32 h-32 rounded-full flex flex-col items-center justify-center transition-all duration-200 shadow-lg ${
+                      isListening
+                        ? "bg-[#B8860B] text-white shadow-accent"
+                        : isSpeaking
+                        ? "bg-[#1A1A1A] text-white"
+                        : "bg-white text-[#1A1A1A] border-2 border-[#B8860B] hover:bg-[#F5F3F0]"
+                    }`}>
+                    <i className={`text-2xl mb-1.5 ${
+                      isListening
+                        ? "fa-solid fa-microphone-lines"
+                        : isSpeaking
+                        ? "fa-solid fa-volume-high text-[#D4A84B]"
+                        : sessionStatus === "RUNNING"
+                        ? "fa-solid fa-circle-notch fa-spin text-[#B8860B]"
+                        : "fa-solid fa-microphone text-[#B8860B]"
+                    }`}></i>
+                    <span className="font-mono text-[10px] uppercase tracking-widest">
+                      {isListening ? "Send Now" : isSpeaking ? "Speaking" : "Tap to Speak"}
+                    </span>
+                  </button>
+                </div>
+
+                <div className="space-y-2 flex flex-col items-center">
+                  <span className="small-caps text-[#B8860B]">
+                    {isListening
+                      ? `🎙️ Listening... (Mic Level: ${micLevel}%)`
+                      : isSpeaking
+                      ? "🔊 OperatorOS Speaking Out Loud"
+                      : sessionStatus === "WAITING_APPROVAL"
+                      ? "✋ Awaiting Voice Decision: Say 'Approve' or 'Deny'"
+                      : "Tap Circle to Speak"}
+                  </span>
+
+                  {isListening && (
+                    <div className="w-full max-w-xs space-y-2">
+                      <div className="w-full h-1.5 bg-[#E8E4DF] rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-[#B8860B] transition-all duration-75"
+                          style={{ width: `${Math.max(8, micLevel)}%` }}
+                        />
+                      </div>
+                      <SerifButton variant="primary" size="xs" onClick={finishAndSendVoice} className="w-full">
+                        <i className="fa-solid fa-paper-plane mr-1.5"></i>
+                        <span>Done Speaking • Send Now</span>
+                      </SerifButton>
+                    </div>
+                  )}
+
+                  {activeAgentStep && (
+                    <span className="font-mono text-xs text-[#6B6B6B] bg-white px-3 py-1 rounded border border-[#E8E4DF]">
+                      {activeAgentStep}
+                    </span>
+                  )}
+                </div>
+
+                <div className="text-left">
+                  <GoldPullQuote
+                    quote={
+                      isListening
+                        ? voiceStatusText.replace("Listening... ", "")
+                        : currentSpokenLine
+                        ? currentSpokenLine
+                        : voiceHistory.length > 0
+                        ? voiceHistory[voiceHistory.length - 1].text
+                        : "Speak into your mic or click a voice starter below!"
+                    }
+                    attribution={isListening ? "Live Microphone Input" : "OperatorOS Spoken Output"}
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  {[
+                    "Hi, what's the status of my shop today?",
+                    "Close my shop for today.",
+                    "Run a weekend campaign for my shop.",
+                    "Send payment reminders for overdue customer dues."
+                  ].map((cmd, i) => (
+                    <SerifButton
+                      key={i}
+                      variant="outline"
+                      size="xs"
+                      onClick={() => {
+                        setPrompt(cmd);
+                        handleExecute(cmd);
+                      }}>
+                      <span>&ldquo;{cmd}&rdquo;</span>
+                    </SerifButton>
+                  ))}
+                </div>
+
+                {sessionStatus === "WAITING_APPROVAL" && pendingApproval && (
+                  <SerifCard featured={true} label="Approval Checkpoint" title={pendingApproval.action_title} className="text-left">
+                    <p className="text-xs text-[#1A1A1A] mb-3">{pendingApproval.rationale}</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <SerifButton variant="secondary" size="sm" onClick={() => handleApproval("deny")}>
+                        <span>Deny (or say &ldquo;Deny&rdquo;)</span>
+                      </SerifButton>
+                      <SerifButton variant="primary" size="sm" onClick={() => handleApproval("allow")}>
+                        <span>Approve (or say &ldquo;Approve&rdquo;)</span>
+                      </SerifButton>
+                    </div>
+                  </SerifCard>
+                )}
+              </div>
+
+              <div className="max-w-4xl mx-auto w-full pt-4 border-t border-[#E8E4DF] flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleExecute()}
+                  placeholder="Speak into your mic or type here to talk to OperatorOS..."
+                  className="flex-1 h-11 px-4 rounded-md border border-[#E8E4DF] bg-white text-[#1A1A1A] text-sm focus:outline-none focus:border-[#B8860B]"
+                />
+                <SerifButton variant="primary" size="md" onClick={() => handleExecute()}>
+                  <span>Send</span>
+                </SerifButton>
+                {isSpeaking && (
+                  <SerifButton variant="outline" size="md" onClick={stopSpeaking}>
+                    <span>Interrupt</span>
+                  </SerifButton>
+                )}
+                <SerifButton variant="secondary" size="md" onClick={handleVoiceToggle}>
+                  <i className="fa-solid fa-microphone mr-1.5 text-[#B8860B]"></i>
+                  <span>{isListening ? "Stop Mic" : "Speak"}</span>
+                </SerifButton>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
