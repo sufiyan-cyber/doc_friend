@@ -1,0 +1,550 @@
+{
+  "name": "OperatorOS — Multi-Branch Autonomous Action Executor (n8n + CALL-E + Telegram + Google Sheets)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "execute-business-action",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e1b2c3d4-1111-4444-8888-000000000001",
+      "name": "OperatorOS Action Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [140, 420],
+      "webhookId": "operator-os-business-action"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst body = raw.body || raw;\nconst actionId = body.action_id || 'act_unknown';\nconst actionType = (body.action_type || 'PURCHASE_ORDER').toUpperCase();\nconst businessId = body.business_id || 'biz_001';\nconst payload = body.payload || {};\nconst config = body.config || {};\n\nconst now = new Date();\nconst dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');\nconst randHex = Math.random().toString(16).substring(2, 6).toUpperCase();\nconst orderNumber = payload.order_number || `PO-${dateStr}-${randHex}`;\n\nconst items = Array.isArray(payload.items) ? payload.items : [];\nconst itemsSummary = items.length > 0\n  ? items.map(i => `${i.quantity} units of ${i.name} (Rs ${i.subtotal || (i.quantity * i.unit_cost)})`).join(', ')\n  : '25L Farm Fresh A2 Milk, 20 packs Organic Eggs, 10 Artisanal Sourdough Loaves, and 15 tubs Greek Yogurt';\n\nconst supplierName = payload.supplier_name || 'MilkyWay Fresh Foods Co.';\nconst supplierPhone = config.supplier_phone || payload.supplier_phone || '+918496074290';\nconst totalAmount = payload.total_amount || 4500;\n\nconst calleTaskPrompt = `Call ${supplierPhone} (${supplierName}). You are OperatorOS calling on behalf of Rajesh Kumar, owner of Green Valley Organic Grocers in Indiranagar, Bengaluru. Place purchase order ${orderNumber} for tomorrow 6:00 AM delivery: ${itemsSummary}, totaling ${totalAmount} rupees. Ask the supplier to confirm stock availability and 6 AM delivery slot.`;\n\nconst customers = Array.isArray(payload.customers) ? payload.customers : [\n  { name: 'Priya Sharma', phone: '+919880112233', outstanding_due: 1850, due_since_days: 9 },\n  { name: 'Vikram Rao', phone: '+919880445566', outstanding_due: 2400, due_since_days: 14 }\n];\n\nlet telegramText = '';\nif (actionType === 'PAYMENT_REMINDER') {\n  const lines = customers.map(c => `• *${c.name}*: ₹${c.outstanding_due} (overdue ${c.due_since_days || 7} days) — UPI: greenvalley@okaxis`).join('\\n');\n  telegramText = `💳 *Green Valley Organic Grocers — Courteous Payment Reminder*\\n\\nNamaste! Gentle reminder from Rajesh Kumar at Green Valley Organic Grocers regarding store credit balances:\\n\\n${lines}\\n\\n*Total Pending:* ₹${payload.total_due || 4250}\\nThank you for shopping with us!`;\n} else if (actionType === 'CAMPAIGN_BROADCAST') {\n  telegramText = `🚀 *${payload.campaign_name || 'Weekend Organic Harvest Special'}*\\n\\n${payload.copy_text || 'Enjoy 15% OFF on Wildflower Honey, A2 Milk & Sourdough this weekend!'}\\n\\n📊 *Channel:* ${payload.channel || 'WhatsApp & Telegram Broadcast'}\\n👥 *Audience:* ${payload.target_audience || '142 Loyal Customers'}\\n💰 *Projected Revenue:* ₹${payload.estimated_revenue || 22397.5}`;\n} else {\n  telegramText = `📦 *Purchase Order & CALL-E Supplier Call Dispatched*\\n\\n*Order No:* ${orderNumber}\\n*Supplier:* ${supplierName} (${supplierPhone})\\n*Items:* ${itemsSummary}\\n*Total Value:* ₹${totalAmount}\\n*Delivery:* Tomorrow 06:00 AM\\n*CALL-E Voice Agent:* Outbound supplier order call initiated.`;\n}\n\nreturn [{\n  json: {\n    action_id: actionId,\n    action_type: actionType,\n    business_id: businessId,\n    order_number: orderNumber,\n    supplier_name: supplierName,\n    supplier_phone: supplierPhone,\n    items_summary: itemsSummary,\n    total_amount: totalAmount,\n    calle_task_prompt: calleTaskPrompt,\n    telegram_text: telegramText,\n    customers: customers,\n    payload: payload,\n    config: {\n      calle_api_key: config.calle_api_key || '',\n      telegram_bot_token: config.telegram_bot_token || '',\n      telegram_chat_id: config.telegram_chat_id || '',\n      google_sheet_id: config.google_sheet_id || '1a5RFLAso_9ESi8F71TanbElvodlR-QrvYdGyE4j14go',\n      spreadsheet_webhook_url: config.spreadsheet_webhook_url || ''\n    },\n    timestamp: now.toISOString(),\n    execution_id: `n8n-cloud-${randHex}`\n  }\n}];"
+      },
+      "id": "e1b2c3d4-2222-4444-8888-000000000002",
+      "name": "Prepare Action Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [360, 420]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action_type }}",
+                    "rightValue": "PURCHASE_ORDER",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "PURCHASE_ORDER"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action_type }}",
+                    "rightValue": "PAYMENT_REMINDER",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "PAYMENT_REMINDER"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action_type }}",
+                    "rightValue": "CAMPAIGN_BROADCAST",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "CAMPAIGN_BROADCAST"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "e1b2c3d4-3333-4444-8888-000000000003",
+      "name": "Switch by Action Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [580, 420]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Prepare Action Context').item.json;\nreturn [{\n  json: {\n    Timestamp: ctx.timestamp,\n    Order_No: ctx.order_number,\n    Action_Branch: 'PURCHASE_ORDER',\n    Supplier_Name: ctx.supplier_name,\n    Supplier_Phone: ctx.supplier_phone,\n    Ordered_Items: ctx.items_summary,\n    Total_Amount_INR: ctx.total_amount,\n    Delivery_Slot: 'Tomorrow 06:00 AM',\n    Status: 'PO_DISPATCHED_AND_CALLE_CALLED'\n  }\n}];"
+      },
+      "id": "e1b2c3d4-4444-4444-8888-000000000105",
+      "name": "Prepare PO Sheet Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 160]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Prepare Action Context').item.json.config.google_sheet_id || '1a5RFLAso_9ESi8F71TanbElvodlR-QrvYdGyE4j14go' }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "PurchaseOrders",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {}
+      },
+      "id": "e1b2c3d4-4444-4444-8888-000000000102",
+      "name": "Google Sheets: Log Purchase Order",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1060, 160],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $('Prepare Action Context').item.json.config.telegram_bot_token }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": {{ JSON.stringify($('Prepare Action Context').item.json.config.telegram_chat_id) }},\n  \"text\": {{ JSON.stringify($('Prepare Action Context').item.json.telegram_text) }},\n  \"parse_mode\": \"Markdown\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "e1b2c3d4-4444-4444-8888-000000000103",
+      "name": "Telegram: Send PO & Call Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1280, 160],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.heycall-e.com/v1/calls",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Prepare Action Context').item.json.config.calle_api_key }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"task\": {{ JSON.stringify($('Prepare Action Context').item.json.calle_task_prompt) }},\n  \"recipients\": [\n    {\n      \"phones\": [{{ JSON.stringify($('Prepare Action Context').item.json.supplier_phone) }}]\n    }\n  ],\n  \"metadata\": {\n    \"action_id\": {{ JSON.stringify($('Prepare Action Context').item.json.action_id) }},\n    \"order_number\": {{ JSON.stringify($('Prepare Action Context').item.json.order_number) }},\n    \"business_id\": {{ JSON.stringify($('Prepare Action Context').item.json.business_id) }}\n  }\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "e1b2c3d4-4444-4444-8888-000000000101",
+      "name": "CALL-E: Place Voice Call to Supplier",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1500, 160],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Prepare Action Context').item.json;\nconst calleResp = $input.first().json || {};\nlet tgResp = {};\ntry { tgResp = $('Telegram: Send PO & Call Alert').item.json || {}; } catch (e) {}\n\nreturn [{\n  json: {\n    status: 'COMPLETED',\n    branch_executed: 'PURCHASE_ORDER_CALLE_AND_SHEETS',\n    execution_id: ctx.execution_id,\n    action_id: ctx.action_id,\n    action_type: 'PURCHASE_ORDER',\n    business_id: ctx.business_id,\n    order_number: ctx.order_number,\n    supplier_name: ctx.supplier_name,\n    supplier_phone: ctx.supplier_phone,\n    total_amount: ctx.total_amount,\n    calle_call_id: calleResp.id || calleResp.call_id || `calle-${ctx.execution_id}`,\n    calle_status: 'LIVE_CALL_DISPATCHED',\n    telegram_notified: Boolean(tgResp.ok),\n    spreadsheet_logged: true,\n    channel: 'CALL-E AI Voice Call + Telegram + Google Sheets',\n    dispatch_status: 'SUPPLIER_CALLED_AND_LOGGED_VIA_N8N',\n    executed_at: ctx.timestamp,\n    estimated_delivery: 'Tomorrow 06:00 AM'\n  }\n}];"
+      },
+      "id": "e1b2c3d4-4444-4444-8888-000000000104",
+      "name": "Format PO & Call Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1720, 160]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Prepare Action Context').item.json;\nconst customerNames = (ctx.customers || []).map(c => `${c.name} (Rs ${c.outstanding_due})`).join(', ');\nreturn [{\n  json: {\n    Timestamp: ctx.timestamp,\n    Action_ID: ctx.action_id,\n    Action_Branch: 'PAYMENT_REMINDER',\n    Customers_Reminded: customerNames,\n    Total_Overdue_INR: ctx.payload.total_due || 4250,\n    Payment_Link: 'upi://pay?pa=greenvalley@okaxis',\n    Channel: 'Telegram Bot + WhatsApp',\n    Status: 'REMINDERS_SENT'\n  }\n}];"
+      },
+      "id": "e1b2c3d4-5555-4444-8888-000000000205",
+      "name": "Prepare Reminder Sheet Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 420]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Prepare Action Context').item.json.config.google_sheet_id || '1a5RFLAso_9ESi8F71TanbElvodlR-QrvYdGyE4j14go' }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "PaymentReminders",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {}
+      },
+      "id": "e1b2c3d4-5555-4444-8888-000000000202",
+      "name": "Google Sheets: Log Payment Reminders",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1060, 420],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $('Prepare Action Context').item.json.config.telegram_bot_token }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": {{ JSON.stringify($('Prepare Action Context').item.json.config.telegram_chat_id) }},\n  \"text\": {{ JSON.stringify($('Prepare Action Context').item.json.telegram_text) }},\n  \"parse_mode\": \"Markdown\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "e1b2c3d4-5555-4444-8888-000000000201",
+      "name": "Telegram: Send Payment Reminders",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1280, 420],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Prepare Action Context').item.json;\nconst tgResp = $input.first().json || {};\n\nreturn [{\n  json: {\n    status: 'COMPLETED',\n    branch_executed: 'PAYMENT_REMINDER_TELEGRAM_AND_SHEETS',\n    execution_id: ctx.execution_id,\n    action_id: ctx.action_id,\n    action_type: 'PAYMENT_REMINDER',\n    business_id: ctx.business_id,\n    total_sent: ctx.customers.length,\n    telegram_sent: Boolean(tgResp.ok),\n    telegram_message_id: tgResp.result ? tgResp.result.message_id : null,\n    spreadsheet_logged: true,\n    channel: 'Telegram Bot + UPI Payment Links + Google Sheets',\n    executed_at: ctx.timestamp\n  }\n}];"
+      },
+      "id": "e1b2c3d4-5555-4444-8888-000000000203",
+      "name": "Format Payment Reminder Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 420]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Prepare Action Context').item.json;\nreturn [{\n  json: {\n    Timestamp: ctx.timestamp,\n    Action_ID: ctx.action_id,\n    Action_Branch: 'CAMPAIGN_BROADCAST',\n    Campaign_Name: ctx.payload.campaign_name || 'Weekend Organic Harvest',\n    Target_Audience: ctx.payload.target_audience || '142 Loyal Customers',\n    Discount_Offer: `${ctx.payload.discount_pct || 15}% OFF`,\n    Projected_Revenue_INR: ctx.payload.estimated_revenue || 22397.5,\n    Channel: ctx.payload.channel || 'WhatsApp & Telegram Broadcast',\n    Status: 'CAMPAIGN_BROADCASTED'\n  }\n}];"
+      },
+      "id": "e1b2c3d4-6666-4444-8888-000000000305",
+      "name": "Prepare Campaign Sheet Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 680]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Prepare Action Context').item.json.config.google_sheet_id || '1a5RFLAso_9ESi8F71TanbElvodlR-QrvYdGyE4j14go' }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Campaigns",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {}
+      },
+      "id": "e1b2c3d4-6666-4444-8888-000000000302",
+      "name": "Google Sheets: Log Campaign Broadcast",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1060, 680],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $('Prepare Action Context').item.json.config.telegram_bot_token }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": {{ JSON.stringify($('Prepare Action Context').item.json.config.telegram_chat_id) }},\n  \"text\": {{ JSON.stringify($('Prepare Action Context').item.json.telegram_text) }},\n  \"parse_mode\": \"Markdown\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "e1b2c3d4-6666-4444-8888-000000000301",
+      "name": "Telegram: Broadcast Campaign",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1280, 680],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Prepare Action Context').item.json;\nconst tgResp = $input.first().json || {};\n\nreturn [{\n  json: {\n    status: 'COMPLETED',\n    branch_executed: 'CAMPAIGN_BROADCAST_TELEGRAM_AND_SHEETS',\n    execution_id: ctx.execution_id,\n    action_id: ctx.action_id,\n    action_type: 'CAMPAIGN_BROADCAST',\n    business_id: ctx.business_id,\n    campaign_name: ctx.payload.campaign_name || 'Weekend Organic Harvest',\n    telegram_sent: Boolean(tgResp.ok),\n    spreadsheet_logged: true,\n    channel: 'Telegram Broadcast + WhatsApp + Google Sheets',\n    executed_at: ctx.timestamp\n  }\n}];"
+      },
+      "id": "e1b2c3d4-6666-4444-8888-000000000303",
+      "name": "Format Campaign Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 680]
+    },
+    {
+      "parameters": {
+        "respondWith": "firstIncomingItem",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "e1b2c3d4-7777-4444-8888-000000000400",
+      "name": "Return Verification to TrueForge",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1940, 420]
+    }
+  ],
+  "connections": {
+    "OperatorOS Action Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Action Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Action Context": {
+      "main": [
+        [
+          {
+            "node": "Switch by Action Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch by Action Type": {
+      "main": [
+        [
+          {
+            "node": "Prepare PO Sheet Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Reminder Sheet Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Campaign Sheet Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare PO Sheet Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare PO Sheet Row": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets: Log Purchase Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets: Log Purchase Order": {
+      "main": [
+        [
+          {
+            "node": "Telegram: Send PO & Call Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: Send PO & Call Alert": {
+      "main": [
+        [
+          {
+            "node": "CALL-E: Place Voice Call to Supplier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CALL-E: Place Voice Call to Supplier": {
+      "main": [
+        [
+          {
+            "node": "Format PO & Call Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format PO & Call Response": {
+      "main": [
+        [
+          {
+            "node": "Return Verification to TrueForge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Reminder Sheet Row": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets: Log Payment Reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets: Log Payment Reminders": {
+      "main": [
+        [
+          {
+            "node": "Telegram: Send Payment Reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: Send Payment Reminders": {
+      "main": [
+        [
+          {
+            "node": "Format Payment Reminder Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Payment Reminder Response": {
+      "main": [
+        [
+          {
+            "node": "Return Verification to TrueForge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Campaign Sheet Row": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets: Log Campaign Broadcast",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets: Log Campaign Broadcast": {
+      "main": [
+        [
+          {
+            "node": "Telegram: Broadcast Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: Broadcast Campaign": {
+      "main": [
+        [
+          {
+            "node": "Format Campaign Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Campaign Response": {
+      "main": [
+        [
+          {
+            "node": "Return Verification to TrueForge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

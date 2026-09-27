@@ -1,0 +1,97 @@
+{
+  "name": "Purchase Order Execution & Supplier Dispatch",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "execute-business-action",
+        "options": {}
+      },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"body\"][\"action_type\"]}}",
+              "value2": "PURCHASE_ORDER"
+            }
+          ]
+        }
+      },
+      "name": "Switch Action Type",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [320, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.milkywaydairy.in/v1/orders/edi",
+        "options": {}
+      },
+      "name": "Transmit to Supplier Gateway",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [560, 200]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "DISPATCHED"
+            },
+            {
+              "name": "execution_id",
+              "value": "=n8n-po-{{$now.format('YYYYMMDD-HHmmss')}}"
+            }
+          ]
+        }
+      },
+      "name": "Format Acknowledgment",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [800, 200]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Switch Action Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Action Type": {
+      "main": [
+        [
+          {
+            "node": "Transmit to Supplier Gateway",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transmit to Supplier Gateway": {
+      "main": [
+        [
+          {
+            "node": "Format Acknowledgment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
