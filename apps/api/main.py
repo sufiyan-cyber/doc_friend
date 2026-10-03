@@ -16,17 +16,24 @@ from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from pydantic import BaseModel, Field
 
 from db.database import SessionLocal, init_db
-from db.models import Business, Product, Inventory, Customer, Sale, PurchaseOrder, ActionRecord, AuditEvent
+from db.models import (
+    Business, Product, Inventory, Customer, Sale, PurchaseOrder, ActionRecord, AuditEvent,
+    Department, HospitalTask, HospitalCall, InventoryRequest, FollowUp, HospitalDevice
+)
 from agent.business_operator import get_or_create_session, active_sessions
-from mcp_business.server import tool_get_business_profile, tool_get_sales_data, tool_get_inventory, tool_get_customer_dues
+from mcp_business.server import (
+    tool_get_business_profile, tool_get_sales_data, tool_get_inventory, tool_get_customer_dues,
+    tool_get_operational_summary, tool_get_today_schedule, tool_get_pending_tasks, tool_get_followups,
+    tool_get_department_directory, tool_create_inventory_request, tool_initiate_call
+)
 
 # Initialize database
 init_db()
 
 app = FastAPI(
-    title="Business Operator TrueForge API",
-    description="Backend API and TrueForge agent bridge for the EmberGround AI Hackathon 2026 (Track 2: AI Business Operator)",
-    version="1.0.0"
+    title="HospiOne Hospital Operations AI Platform API",
+    description="Voice-First Hospital Operations AI Platform — Non-Clinical Healthcare Workflows",
+    version="2.0.0"
 )
 
 # Static & Web Dashboard Mount
@@ -62,6 +69,41 @@ class ApprovalDecisionRequest(BaseModel):
     decision: str = Field(default="allow", description="'allow' or 'deny'")
     reason: Optional[str] = Field(default=None, description="Optional explanation for decision")
     language_code: Optional[str] = Field(default=None, description="Optional language override")
+
+# HospiOne Hospital Operations Request Models
+class CreateHospitalTaskRequest(BaseModel):
+    title: str = Field(..., description="Operational task description")
+    department: str = Field(default="General Operations")
+    priority: str = Field(default="Standard")
+    assigned_to: str = Field(default="Unassigned")
+    due_hours: int = Field(default=4)
+    notes: Optional[str] = None
+
+class CreateInventoryReqRequest(BaseModel):
+    item_name: str = Field(..., description="Medical supply name")
+    quantity: int = Field(default=20)
+    unit: str = Field(default="boxes")
+    department: str = Field(default="OPD Nursing Station")
+    requested_by: str = Field(default="Nurse Demo")
+    priority: str = Field(default="Standard")
+    rationale: Optional[str] = None
+
+class InitiateHospitalCallRequest(BaseModel):
+    department: str = Field(default="Biomedical Engineering")
+    extension: Optional[str] = Field(default="214")
+    phone: Optional[str] = Field(default="+91 84960 74290")
+    purpose: str = Field(default="Maintenance request update")
+    initiated_by: str = Field(default="Dr. Demo (Web Command)")
+
+class UpdateTaskStatusRequest(BaseModel):
+    status: str = Field(default="Completed")
+    assigned_to: Optional[str] = None
+
+class UpdateFollowupStatusRequest(BaseModel):
+    contact_status: str = Field(default="Contacted")
+    administrative_status: Optional[str] = None
+    notes: Optional[str] = None
+
 
 # Global language state & caches for Sarvam + Multilingual Failover
 LAST_ACTIVE_LANGUAGE: str = "en-IN"
@@ -268,6 +310,358 @@ def get_business_summary(business_id: str = "biz_001"):
         }
     finally:
         db.close()
+
+# =====================================================================
+# HOSPI-ONE HOSPITAL OPERATIONS API ROUTES
+# =====================================================================
+
+@app.get("/api/hospital/summary")
+def get_hospital_summary():
+    """Returns HospiOne operational command center metrics, KPI cards, and departments."""
+    db = SessionLocal()
+    try:
+        tasks_count = db.query(HospitalTask).filter(HospitalTask.status.in_(["Pending", "Awaiting Approval", "In Progress"])).count()
+        calls_count = db.query(HospitalCall).count()
+        inv_reqs_count = db.query(InventoryRequest).filter(InventoryRequest.status.in_(["Pending Approval", "Approved"])).count()
+        followups_count = db.query(FollowUp).count()
+        online_devices = db.query(HospitalDevice).filter(HospitalDevice.status == "ONLINE").count()
+        total_devices = db.query(HospitalDevice).count()
+        low_stock_count = db.query(Inventory).filter(Inventory.current_stock <= Inventory.reorder_level).count()
+
+        depts = db.query(Department).all()
+        departments_list = [
+            {
+                "id": d.id,
+                "name": d.name,
+                "extension": d.extension,
+                "phone": d.phone,
+                "head": d.head,
+                "location": d.location,
+                "status": d.status,
+                "pending_requests": d.pending_requests_count,
+                "category": d.category
+            }
+            for d in depts
+        ]
+
+        return {
+            "hospital": {
+                "id": "hosp_001",
+                "name": "HospiOne Hospital Operations Center",
+                "category": "Multi-Specialty Healthcare Campus",
+                "operating_hours": "24/7 Operations",
+                "address": "HospiOne Health Campus, 100ft Road, Indiranagar, Bengaluru",
+                "director": "Dr. Demo / Medical Director",
+                "phone": "+91 80 4123 4500"
+            },
+            "metrics": {
+                "pending_tasks": tasks_count,
+                "calls_today": calls_count,
+                "inventory_requests": inv_reqs_count,
+                "followups_due": followups_count,
+                "devices_online_str": f"{online_devices} / {total_devices}",
+                "devices_online": online_devices,
+                "devices_total": total_devices,
+                "low_stock_count": low_stock_count
+            },
+            "departments": departments_list
+        }
+    finally:
+        db.close()
+
+@app.get("/api/hospital/tasks")
+def list_hospital_tasks(status: Optional[str] = None, priority: Optional[str] = None):
+    """Retrieve hospital operational tasks with optional status and priority filtering."""
+    db = SessionLocal()
+    try:
+        q = db.query(HospitalTask)
+        if status and status.lower() != "all":
+            q = q.filter(HospitalTask.status.ilike(f"%{status}%"))
+        if priority and priority.lower() != "all":
+            q = q.filter(HospitalTask.priority.ilike(f"%{priority}%"))
+        tasks = q.order_by(HospitalTask.created_at.desc()).all()
+        return {
+            "count": len(tasks),
+            "tasks": [
+                {
+                    "id": t.id,
+                    "title": t.title,
+                    "department": t.department,
+                    "created_by": t.created_by,
+                    "assigned_to": t.assigned_to,
+                    "status": t.status,
+                    "priority": t.priority,
+                    "due_at": t.due_at.isoformat() if t.due_at else None,
+                    "created_at": t.created_at.isoformat(),
+                    "notes": t.notes
+                }
+                for t in tasks
+            ]
+        }
+    finally:
+        db.close()
+
+@app.post("/api/hospital/tasks")
+def create_hospital_task(req: CreateHospitalTaskRequest):
+    """Create a new operational task."""
+    db = SessionLocal()
+    try:
+        now = datetime.datetime.now(datetime.UTC)
+        tid = f"TASK-{int(now.timestamp()) % 100000}"
+        t = HospitalTask(
+            id=tid,
+            title=req.title,
+            department=req.department,
+            priority=req.priority,
+            assigned_to=req.assigned_to,
+            status="Pending",
+            due_at=now + datetime.timedelta(hours=req.due_hours),
+            created_at=now,
+            notes=req.notes
+        )
+        db.add(t)
+        audit = AuditEvent(
+            id=f"audit_{uuid.uuid4().hex[:8]}",
+            business_id="biz_001",
+            task_id=tid,
+            source="STAFF",
+            event_type="TASK_CREATED",
+            summary=f"Created task {tid}: {req.title} ({req.department})",
+            details={"task_id": tid, "title": req.title, "department": req.department, "priority": req.priority}
+        )
+        db.add(audit)
+        db.commit()
+        return {"status": "SUCCESS", "task_id": tid, "message": f"Task {tid} created successfully."}
+    finally:
+        db.close()
+
+@app.post("/api/hospital/tasks/{task_id}/status")
+def update_task_status(task_id: str, req: UpdateTaskStatusRequest):
+    """Update task status (e.g. Completed, In Progress)."""
+    db = SessionLocal()
+    try:
+        t = db.query(HospitalTask).filter(HospitalTask.id == task_id).first()
+        if not t:
+            raise HTTPException(status_code=404, detail="Task not found")
+        t.status = req.status
+        if req.assigned_to:
+            t.assigned_to = req.assigned_to
+        if req.status == "Completed":
+            t.completed_at = datetime.datetime.now(datetime.UTC)
+        db.commit()
+        return {"status": "SUCCESS", "task_id": task_id, "new_status": t.status}
+    finally:
+        db.close()
+
+@app.get("/api/hospital/calls")
+def list_hospital_calls():
+    """Retrieve hospital calls log."""
+    db = SessionLocal()
+    try:
+        calls = db.query(HospitalCall).order_by(HospitalCall.time.desc()).all()
+        return {
+            "count": len(calls),
+            "calls": [
+                {
+                    "id": c.id,
+                    "department": c.department,
+                    "extension": c.extension,
+                    "recipient_phone": c.recipient_phone,
+                    "recipient_name": c.recipient_name,
+                    "purpose": c.purpose,
+                    "initiated_by": c.initiated_by,
+                    "time": c.time.isoformat(),
+                    "duration_seconds": c.duration_seconds,
+                    "status": c.status,
+                    "calle_call_id": c.calle_call_id,
+                    "is_simulated": c.is_simulated,
+                    "notes": c.notes
+                }
+                for c in calls
+            ]
+        }
+    finally:
+        db.close()
+
+@app.post("/api/hospital/calls/initiate")
+def initiate_hospital_call(req: InitiateHospitalCallRequest):
+    """Initiate a department call via CALL-E."""
+    res = tool_initiate_call(
+        department=req.department,
+        purpose=req.purpose,
+        initiated_by=req.initiated_by,
+        recipient_phone=req.phone
+    )
+    return res
+
+@app.get("/api/hospital/inventory")
+def list_hospital_inventory():
+    """Retrieve hospital inventory items with current stock, safety buffer, and reorder status."""
+    db = SessionLocal()
+    try:
+        prods = db.query(Product).all()
+        items = []
+        for p in prods:
+            inv = db.query(Inventory).filter(Inventory.product_id == p.id).first()
+            current_stock = inv.current_stock if inv else 0
+            reorder_level = inv.reorder_level if inv else 10
+            status = "Healthy" if current_stock > reorder_level else ("Reorder Soon" if current_stock > 10 else "Low Stock")
+            items.append({
+                "product_id": p.id,
+                "sku": p.sku,
+                "name": p.name,
+                "category": p.category,
+                "unit": p.unit,
+                "current_stock": current_stock,
+                "reorder_level": reorder_level,
+                "min_order_qty": inv.min_order_qty if inv else 15,
+                "status": status
+            })
+        return {"count": len(items), "items": items}
+    finally:
+        db.close()
+
+@app.get("/api/hospital/inventory/requests")
+def list_inventory_requests():
+    """Retrieve hospital inventory requests queue."""
+    db = SessionLocal()
+    try:
+        reqs = db.query(InventoryRequest).order_by(InventoryRequest.created_at.desc()).all()
+        return {
+            "count": len(reqs),
+            "requests": [
+                {
+                    "id": r.id,
+                    "item_name": r.item_name,
+                    "sku": r.sku,
+                    "quantity": r.quantity,
+                    "unit": r.unit,
+                    "department": r.department,
+                    "requested_by": r.requested_by,
+                    "status": r.status,
+                    "priority": r.priority,
+                    "rationale": r.rationale,
+                    "created_at": r.created_at.isoformat(),
+                    "approved_by": r.approved_by,
+                    "approved_at": r.approved_at.isoformat() if r.approved_at else None
+                }
+                for r in reqs
+            ]
+        }
+    finally:
+        db.close()
+
+@app.post("/api/hospital/inventory/requests")
+def create_inventory_request_api(req: CreateInventoryReqRequest):
+    """Create a new hospital inventory request."""
+    return tool_create_inventory_request(
+        item_name=req.item_name,
+        quantity=req.quantity,
+        unit=req.unit,
+        department=req.department,
+        requested_by=req.requested_by,
+        priority=req.priority,
+        rationale=req.rationale or ""
+    )
+
+@app.post("/api/hospital/inventory/requests/{request_id}/approve")
+def approve_inventory_request(request_id: str):
+    """Approve a pending inventory request."""
+    db = SessionLocal()
+    try:
+        r = db.query(InventoryRequest).filter(InventoryRequest.id == request_id).first()
+        if not r:
+            raise HTTPException(status_code=404, detail="Request not found")
+        r.status = "Approved"
+        r.approved_by = "Dr. Demo / Admin"
+        r.approved_at = datetime.datetime.now(datetime.UTC)
+        audit = AuditEvent(
+            id=f"audit_{uuid.uuid4().hex[:8]}",
+            business_id="biz_001",
+            task_id=request_id,
+            source="HUMAN",
+            event_type="INVENTORY_REQUEST_APPROVED",
+            summary=f"Human Approved inventory request {request_id} ({r.item_name}, {r.quantity} {r.unit})",
+            details={"request_id": request_id, "approved_by": r.approved_by}
+        )
+        db.add(audit)
+        db.commit()
+        return {"status": "SUCCESS", "request_id": request_id, "new_status": "Approved"}
+    finally:
+        db.close()
+
+@app.post("/api/hospital/inventory/requests/{request_id}/reject")
+def reject_inventory_request(request_id: str):
+    """Reject an inventory request."""
+    db = SessionLocal()
+    try:
+        r = db.query(InventoryRequest).filter(InventoryRequest.id == request_id).first()
+        if not r:
+            raise HTTPException(status_code=404, detail="Request not found")
+        r.status = "Rejected"
+        db.commit()
+        return {"status": "SUCCESS", "request_id": request_id, "new_status": "Rejected"}
+    finally:
+        db.close()
+
+@app.get("/api/hospital/followups")
+def list_hospital_followups():
+    """Retrieve administrative follow-up coordination records (non-clinical)."""
+    return tool_get_followups()
+
+@app.post("/api/hospital/followups/{followup_id}/contact")
+def update_followup_status(followup_id: str, req: UpdateFollowupStatusRequest):
+    """Update administrative contact status."""
+    db = SessionLocal()
+    try:
+        f = db.query(FollowUp).filter(FollowUp.id == followup_id).first()
+        if not f:
+            raise HTTPException(status_code=404, detail="Follow-up record not found")
+        f.contact_status = req.contact_status
+        if req.administrative_status:
+            f.administrative_status = req.administrative_status
+        if req.notes:
+            f.notes = req.notes
+        db.commit()
+        return {"status": "SUCCESS", "followup_id": followup_id, "contact_status": f.contact_status}
+    finally:
+        db.close()
+
+@app.get("/api/hospital/devices")
+def list_hospital_devices():
+    """Retrieve physical AI device fleet statuses."""
+    db = SessionLocal()
+    try:
+        devs = db.query(HospitalDevice).all()
+        return {
+            "count": len(devs),
+            "devices": [
+                {
+                    "id": d.id,
+                    "name": d.name,
+                    "location": d.location,
+                    "hardware_type": d.hardware_type,
+                    "status": d.status,
+                    "mic_status": d.mic_status,
+                    "speaker_status": d.speaker_status,
+                    "display_status": d.display_status,
+                    "network_status": d.network_status,
+                    "last_heartbeat": d.last_heartbeat.isoformat(),
+                    "current_user": d.current_user,
+                    "last_command": d.last_command,
+                    "software_version": d.software_version,
+                    "firmware_version": d.firmware_version
+                }
+                for d in devs
+            ]
+        }
+    finally:
+        db.close()
+
+@app.get("/api/hospital/departments")
+def list_hospital_departments():
+    """Retrieve hospital departments directory."""
+    return tool_get_department_directory()
 
 def _mirror_to_trueforge_bg(prompt: str):
     """Non-blocking background mirror that creates a live TrueForge session + turn on localhost:8790."""
@@ -1407,9 +1801,24 @@ async def mcp_jsonrpc_endpoint(request: Request):
         t_name = params.get("name", "")
         t_args = params.get("arguments") or {}
         dispatch_map = {
+            "get_operational_summary": lambda a: tool_get_operational_summary(),
+            "get_today_schedule": lambda a: tool_get_today_schedule(),
+            "get_pending_tasks": lambda a: tool_get_pending_tasks(a.get("department")),
+            "get_followups": lambda a: tool_get_followups(a.get("status")),
+            "get_department_directory": lambda a: tool_get_department_directory(),
+            "create_inventory_request": lambda a: tool_create_inventory_request(
+                a.get("item_name", "Examination Gloves"), int(a.get("quantity", 20)),
+                a.get("unit", "boxes"), a.get("department", "General Ward"),
+                a.get("requested_by", "Staff"), a.get("priority", "Standard")
+            ),
+            "initiate_call": lambda a: tool_initiate_call(
+                a.get("department", "Biomedical Engineering"),
+                a.get("purpose", "Maintenance request update"),
+                a.get("initiated_by", "Voice Command")
+            ),
             "get_business_profile": lambda a: tool_get_business_profile(a.get("business_id", "biz_001")),
             "get_sales_data": lambda a: tool_get_sales_data(a.get("business_id", "biz_001"), a.get("date_filter", "today")),
-            "get_inventory": lambda a: tool_get_inventory(a.get("business_id", "biz_001"), a.get("low_stock_only", True)),
+            "get_inventory": lambda a: tool_get_inventory(a.get("business_id", "biz_001"), a.get("low_stock_only", False)),
             "get_customer_dues": lambda a: tool_get_customer_dues(a.get("business_id", "biz_001"), a.get("min_overdue_days", 7)),
             "get_supplier_information": lambda a: tool_get_supplier_information(a.get("business_id", "biz_001")),
             "search_business_memory": lambda a: tool_search_business_memory(a.get("query", ""), a.get("business_id", "biz_001")),
@@ -1447,66 +1856,79 @@ async def mcp_jsonrpc_endpoint(request: Request):
 
 
 # ==============================================================================
-# ESP32 SPI TFT MERCHANT DASHBOARD ENDPOINTS
+# ESP32 SPI TFT HOSPITAL OPERATIONS DASHBOARD ENDPOINTS
 # ==============================================================================
 
 class ESP32CommandRequest(BaseModel):
     business_id: str = Field(default="biz_001")
-    command: str = Field(..., description="Merchant command or 'approve'/'deny'")
+    command: str = Field(..., description="Hospital staff command or 'approve'/'deny'")
     task_id: Optional[str] = Field(default=None)
 
 
 @app.get("/api/esp32/dashboard")
 def get_esp32_dashboard(business_id: str = "biz_001"):
-    """Compact flat JSON payload tailored for the ESP32 320x240 SPI TFT Merchant Dashboard."""
-    summary_data = get_business_summary(business_id)
-    biz = summary_data["business"]
-    metrics = summary_data["metrics"]
+    """Compact flat JSON payload tailored for the ESP32 320x240 SPI TFT Hospital Operations Dashboard."""
+    db = SessionLocal()
+    try:
+        tasks_count = db.query(HospitalTask).filter(HospitalTask.status.in_(["Pending", "Awaiting Approval", "In Progress"])).count()
+        calls_count = db.query(HospitalCall).count()
+        inv_reqs_count = db.query(InventoryRequest).filter(InventoryRequest.status.in_(["Pending Approval", "Approved"])).count()
+        followups_count = db.query(FollowUp).count()
+        devices_online = db.query(HospitalDevice).filter(HospitalDevice.status == "ONLINE").count()
+        devices_total = db.query(HospitalDevice).count()
 
-    # Find latest active session if any
-    latest_session = None
-    for sess in reversed(list(active_sessions.values())):
-        if sess.business_id == business_id:
-            latest_session = sess
-            break
-
-    agent_status = latest_session.status if latest_session else "ONLINE"
-    agent_msg = "Store systems nominal. Ready for merchant commands."
-    last_cmd = "Status Check"
-    waiting_approval = False
-    active_task_id = latest_session.session_id if latest_session else ""
-
-    if latest_session:
-        waiting_approval = (latest_session.status == "WAITING_FOR_APPROVAL")
-        for evt in reversed(latest_session.events):
-            if evt.get("voice_text"):
-                agent_msg = evt["voice_text"]
-                break
-            elif evt.get("summary"):
-                agent_msg = evt["summary"]
+        latest_session = None
+        for sess in reversed(list(active_sessions.values())):
+            if sess.business_id == business_id:
+                latest_session = sess
                 break
 
-    return {
-        "store_name": biz["name"][:22],
-        "owner": biz["owner_name"],
-        "sales_today": int(metrics["total_sales_today"]),
-        "cash_sales": int(metrics["cash_sales"]),
-        "upi_sales": int(metrics["upi_sales"]),
-        "cash_drawer": int(biz["current_cash_in_drawer"]),
-        "low_stock": int(metrics["low_stock_items_count"]),
-        "overdue_dues": int(metrics["total_overdue_dues"]),
-        "overdue_count": int(metrics["overdue_customers_count"]),
-        "agent_status": agent_status,
-        "waiting_approval": 1 if waiting_approval else 0,
-        "task_id": active_task_id,
-        "last_cmd": last_cmd[:36],
-        "agent_msg": agent_msg[:180]
-    }
+        agent_status = latest_session.status if latest_session else "ONLINE"
+        agent_msg = "HospiOne systems nominal. Ready for hospital voice commands."
+        last_cmd = "Command Center Ready"
+        waiting_approval = False
+        active_task_id = latest_session.session_id if latest_session else ""
+
+        if latest_session:
+            waiting_approval = (latest_session.status == "WAITING_FOR_APPROVAL")
+            for evt in reversed(latest_session.events):
+                if evt.get("voice_text"):
+                    agent_msg = evt["voice_text"]
+                    break
+                elif evt.get("summary"):
+                    agent_msg = evt["summary"]
+                    break
+
+        return {
+            "hospital_name": "HospiOne Ops",
+            "store_name": "HospiOne Ops",  # compatibility with ESP32 TFT header
+            "owner": "Dr. Demo",
+            "pending_tasks": tasks_count,
+            "calls_today": calls_count,
+            "inventory_requests": inv_reqs_count,
+            "followups_due": followups_count,
+            "devices_online": f"{devices_online}/{devices_total}",
+            # compatibility keys for older esp32 firmware:
+            "sales_today": tasks_count,
+            "cash_sales": calls_count,
+            "upi_sales": inv_reqs_count,
+            "cash_drawer": followups_count,
+            "low_stock": inv_reqs_count,
+            "overdue_dues": tasks_count,
+            "overdue_count": followups_count,
+            "agent_status": agent_status,
+            "waiting_approval": 1 if waiting_approval else 0,
+            "task_id": active_task_id,
+            "last_cmd": last_cmd[:36],
+            "agent_msg": agent_msg[:180]
+        }
+    finally:
+        db.close()
 
 
 @app.post("/api/esp32/command")
 async def execute_esp32_command(req: ESP32CommandRequest):
-    """Executes a merchant command, interactive answer, or approval decision from the ESP32 dashboard."""
+    """Executes a staff command, interactive answer, or approval decision from the ESP32 dashboard."""
     cmd_clean = req.command.strip()
     cmd_lower = cmd_clean.lower()
 
@@ -1529,10 +1951,23 @@ async def execute_esp32_command(req: ESP32CommandRequest):
     elif target_session and target_session.status == "WAITING_FOR_USER_INPUT":
         async for _ in target_session.continue_task_stream(cmd_clean):
             pass
-    # 3. Handle quick POS sale recording
-    elif cmd_lower in ("sale", "+sale", "record sale"):
-        record_live_pos_sale(RecordSaleRequest(business_id=req.business_id, amount=650.0, payment_method="Cash", items_count=2, notes="ESP32 Counter POS Sale"))
-    # 4. Otherwise start a new OperatorOS agent task
+    # 3. Handle quick hospital actions from hardware buttons
+    elif cmd_lower in ("glove", "+glove", "request glove", "gloves"):
+        tool_create_inventory_request(
+            item_name="Examination Gloves (Nitrile Powder-Free)",
+            quantity=20,
+            unit="boxes",
+            department="OPD Reception Counter",
+            requested_by="ESP32 Device Staff",
+            priority="Standard"
+        )
+    elif cmd_lower in ("call", "call biomed", "call engineering"):
+        tool_initiate_call(
+            department="Biomedical Engineering",
+            purpose="Urgent maintenance inquiry from ESP32 Reception Device",
+            initiated_by="ESP32 Device #01"
+        )
+    # 4. Otherwise start a new HospiOne agent task
     else:
         task_id = f"esp32_{uuid.uuid4().hex[:6]}"
         sess = get_or_create_session(task_id, req.business_id)
@@ -1542,6 +1977,7 @@ async def execute_esp32_command(req: ESP32CommandRequest):
     state = get_esp32_dashboard(req.business_id)
     state["last_cmd"] = cmd_clean[:36]
     return state
+
 
 
 @app.post("/v1/chat/completions")

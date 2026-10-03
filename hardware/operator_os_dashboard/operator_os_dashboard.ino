@@ -57,23 +57,23 @@ const char* SERVER_URL = "http://192.168.1.100:8000"; // OperatorOS FastAPI Serv
 
 Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
 
-// -------------------- MERCHANT DASHBOARD STATE --------------------
+// -------------------- HOSPITAL OPERATIONS DASHBOARD STATE --------------------
 struct DashboardState {
-  String storeName      = "Green Valley Grocers";
-  int    salesToday     = 9850;
-  int    cashInDrawer   = 14850;
-  int    lowStockCount  = 4;
-  int    overdueDues    = 4250;
-  int    overdueCount   = 2;
+  String storeName      = "HospiOne Hospital";
+  int    salesToday     = 12;   // Pending Tasks
+  int    cashInDrawer   = 8;    // Calls Today
+  int    lowStockCount  = 5;    // Open Inventory Requests
+  int    overdueDues    = 17;   // Follow-ups Due
+  int    overdueCount   = 3;    // Devices Online (3/4)
   String agentStatus    = "ONLINE";
   bool   waitingApproval = false;
-  String lastMerchantCmd = "Ready at counter";
-  String agentMessage   = "Namaste Rajesh-ji! Sales: Rs 9850. 4 dairy/bakery items low before 8PM cutoff. Select an action below or type in Serial.";
-  String pendingType    = ""; // "CLOSE_SHOP", "CAMPAIGN", "DUES"
+  String lastMerchantCmd = "Ready at OPD Reception";
+  String agentMessage   = "HospiOne Operations nominal. 12 pending tasks, 5 inventory requests open, 3/4 AI devices online. Ready for staff voice commands.";
+  String pendingType    = ""; // "INVENTORY", "CALL", "MAINTENANCE"
 } state;
 
-int selectedTab = 0; // 0: Close Shop, 1: Weekend Promo, 2: Collect Dues, 3: +POS Sale
-const char* tabLabels[4] = { "1:Close", "2:Promo", "3:Dues", "4:+Sale" };
+int selectedTab = 0; // 0: Tasks, 1: Call Biomed, 2: Requisition Gloves, 3: Follow-ups
+const char* tabLabels[4] = { "1:Tasks", "2:Call", "3:Glove", "4:Follow" };
 
 unsigned long lastSyncMs = 0;
 unsigned long btnDownMs  = 0;

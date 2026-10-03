@@ -6,7 +6,10 @@ import asyncio
 from typing import Dict, Any, List, Optional, AsyncGenerator
 
 from db.database import SessionLocal
-from db.models import ActionRecord, AuditEvent, Business, Product, Inventory, Customer
+from db.models import (
+    ActionRecord, AuditEvent, Business, Product, Inventory, Customer,
+    Department, HospitalTask, HospitalCall, InventoryRequest, FollowUp, HospitalDevice
+)
 from mcp_business.server import (
     tool_get_business_profile,
     tool_get_sales_data,
@@ -21,17 +24,53 @@ from mcp_business.server import (
     tool_broadcast_campaign,
     tool_prepare_customer_dues_reminder,
     tool_send_customer_messages,
-    tool_get_action_status
+    tool_get_action_status,
+    tool_get_operational_summary,
+    tool_get_today_schedule,
+    tool_get_pending_tasks,
+    tool_get_followups,
+    tool_get_department_directory,
+    tool_create_inventory_request,
+    tool_get_inventory_request_status,
+    tool_initiate_call,
+    tool_get_call_status,
+    tool_create_maintenance_ticket,
+    tool_get_maintenance_tickets,
+    tool_assign_task,
+    tool_complete_task,
+    tool_send_notification
 )
 
-BUSINESS_OPERATOR_SYSTEM_PROMPT = """
-You are Business Operator (OperatorOS), the voice-first autonomous digital store manager for retail small businesses.
-Your responsibility is NOT just answering questions—you proactively manage the shop, inspect data across systems, run computations in the TrueForge sandbox, prepare necessary real-world actions, pause for human approval before consequential mutations, execute approved actions through connected tools/n8n, and verify the final outcomes.
+HOSPIONE_SYSTEM_PROMPT = """
+You are HospiOne, the voice-first AI operations assistant for hospitals and healthcare facilities.
+Your scope is strictly non-clinical, administrative, and operational.
+You assist doctors, nurses, administrators, and biomedical engineers with:
+- Tracking and managing hospital operational tasks
+- Departmental voice communication and phone calls via CALL-E
+- Hospital inventory queries and stock replenishment requests
+- Administrative patient follow-up coordination
+- Maintenance tickets for hospital equipment and facilities
+- Schedule and operational status visibility
+
+CLINICAL BOUNDARY: You must NEVER diagnose medical conditions, recommend drug treatments, perform clinical risk scoring, or offer clinical advice. If asked clinical questions, safely redirect the user to consult the clinical medical team.
+HUMAN-IN-THE-LOOP: Every consequential action (submitting inventory purchase requests, placing external phone calls, dispatching maintenance tickets) requires explicit human confirmation.
 """
+BUSINESS_OPERATOR_SYSTEM_PROMPT = HOSPIONE_SYSTEM_PROMPT
+
+def is_clinical_query(prompt: str) -> bool:
+    """Deterministic scope guard to identify non-operational / clinical medical queries."""
+    p = prompt.lower()
+    clinical_keywords = [
+        "chemo", "chemotherapy", "dosage", "dose", "diagnose", "diagnosis",
+        "prescribe", "prescription", "antibiotic", "treatment for", "medicine to take",
+        "chest pain", "heart attack", "cancer treatment", "tumor", "stroke", "ecg interpretation",
+        "blood test result", "vital sign clinical risk", "clinical triage", "medical advice"
+    ]
+    return any(k in p for k in clinical_keywords)
 
 class OperatorAgentSession:
     """
-    Manages an active business task turn, event streaming, voice narration, and approval checkpoints.
+    Manages an active business/hospital operations task turn, event streaming, voice narration, and approval checkpoints.
     Follows the TrueForge event wire protocol.
     """
     def __init__(self, session_id: str, business_id: str = "biz_001"):
@@ -43,6 +82,7 @@ class OperatorAgentSession:
         self.active_action_id: Optional[str] = None
         self.workflow_type: str = "CLOSE_SHOP"
         self.dialogue_context: Dict[str, Any] = {}
+        self.user_role: str = "Doctor"
 
     def _create_event(self, event_type: str, data: Dict[str, Any], thread_id: Optional[str] = "main") -> Dict[str, Any]:
         evt = {
@@ -57,14 +97,41 @@ class OperatorAgentSession:
 
     def _detect_intent(self, prompt: str) -> str:
         p = prompt.lower().strip()
+        if is_clinical_query(p):
+            return "CLINICAL_SCOPE_GUARD"
+
+        # 1. Hospital Inventory Requests
+        if any(w in p for w in ["inventory request", "examination glove", "gloves", "surgical mask", "masks", "syringes", "sanitizer", "n95", "infusion set", "order glove", "restock glove", "ಇನ್ವೆಂಟರಿ", "इन्वेंट्री"]) or ("request" in p and any(i in p for i in ["glove", "mask", "box", "boxes", "stock"])):
+            return "INVENTORY_REQUEST"
+
+        # 2. Hospital Department Calling (CALL-E)
+        if any(w in p for w in ["call biomedical", "call reception", "call department", "call stores", "call facilities", "call it support", "call it", "call lab", "call radiology", "call maintenance", "ಕರೆ ಮಾಡಿ", "कॉल करें", "dial extension", "call-e"]) or ("call" in p and any(d in p for d in ["engineering", "reception", "biomedical", "stores", "facilities", "station"])):
+            return "CALL_DEPARTMENT"
+
+        # 3. Administrative Follow-ups
+        if any(w in p for w in ["follow-up", "followup", "follow up", "due today", "appointment follow", "patient follow", "pat-", "continuity of care", "ಫಾಲೋ-ಅಪ್", "फॉलो-अप"]):
+            return "FOLLOW_UPS"
+
+        # 4. Maintenance Tickets
+        if any(w in p for w in ["maintenance ticket", "maintenance request", "room 302", "air conditioning", "ac maintenance", "repair ventilator", "broken ac"]):
+            return "MAINTENANCE_TICKET"
+
+        # 5. Pending Operational Tasks
+        if any(w in p for w in ["pending task", "what are my task", "operational task", "assigned task", "todo", "hospital task", "my pending", "ಕಾರ್ಯಗಳು", "टास्क"]):
+            return "PENDING_TASKS"
+
+        # 6. Schedule / Operational Overview
+        if any(w in p for w in ["schedule", "today's schedule", "operational overview", "hospital status", "command center", "daily operations", "hospital summary", "operations summary", "ಶೆಡ್ಯೂಲ್", "शेड्यूल"]):
+            return "SCHEDULE_QUERY"
+
+        # Legacy retail intents (preserved for backward compatibility with tests)
         if any(w in p for w in ["weekend", "campaign", "camp", "grow", "promo", "promot", "marketing", "bundle", "discount", "offer", "broadcast", "advertise", "boost", "start a", "run a", "flash sale", "more customers", "bring customers"]):
-            if not any(s in p for s in ["what", "how much", "total sales", "sales today", "status"]) or any(c in p for c in ["campaign", "camp", "promo", "offer", "discount", "weekend", "broadcast", "marketing", "boost", "grow"]):
-                return "WEEKEND_SALES"
-        if any(w in p for w in ["due", "remind", "payment", "credit", "overdue", "collection", "priya", "vikram", "udhaar", "owe", "pending", "bill", "recover", "follow up", "send out", "telegram"]):
+            return "WEEKEND_SALES"
+        if any(w in p for w in ["due", "remind", "payment", "credit", "overdue", "collection", "priya", "vikram", "udhaar", "owe", "bill", "recover"]):
             return "CUSTOMER_DUES"
-        if any(w in p for w in ["close", "closing", "shut", "end day", "end of day", "reconcile", "restock", "purchase order", "reorder", "pack up", "done for today", "wrap up", "lock up", "supplier", "call supplier", "call milkyway", "place order", "order milk", "calle", "call-e"]):
+        if any(w in p for w in ["close", "closing", "shut", "end day", "end of day", "reconcile", "purchase order", "pack up", "wrap up", "supplier", "call supplier", "call milkyway", "place order"]):
             return "CLOSE_SHOP"
-        return "ASK_SALES"
+        return "SCHEDULE_QUERY"
 
     async def _detect_intent_async(self, prompt: str) -> str:
         """
@@ -73,7 +140,18 @@ class OperatorAgentSession:
         2. Gemini 3 Flash semantic intent classification when the merchant speaks a nuanced or conversational command.
         """
         fast = self._detect_intent(prompt)
-        if fast in ("WEEKEND_SALES", "CUSTOMER_DUES", "CLOSE_SHOP"):
+        if fast in (
+            "CLINICAL_SCOPE_GUARD",
+            "INVENTORY_REQUEST",
+            "CALL_DEPARTMENT",
+            "FOLLOW_UPS",
+            "MAINTENANCE_TICKET",
+            "PENDING_TASKS",
+            "SCHEDULE_QUERY",
+            "WEEKEND_SALES",
+            "CUSTOMER_DUES",
+            "CLOSE_SHOP"
+        ):
             return fast
         p = prompt.lower().strip()
         if any(w in p for w in ["status", "sales today", "total sales", "what were my sales", "how is my shop", "how much did we make", "cash in drawer"]):
@@ -87,13 +165,19 @@ class OperatorAgentSession:
         try:
             gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={llm_key}"
             router_prompt = (
-                "Classify the retail merchant's spoken request into exactly one TrueForge workflow intent:\n"
-                "- WEEKEND_SALES: running a campaign, promotion, discount, marketing broadcast, WhatsApp/Telegram/SMS offer, or growing sales.\n"
-                "- CUSTOMER_DUES: sending payment reminders via Telegram/WhatsApp, checking overdue customer credit/udhaar/bills (e.g. Priya, Vikram), or collecting dues.\n"
-                "- CLOSE_SHOP: closing the shop for today, end-of-day cash drawer reconciliation, safe deposit, calling the supplier (CALL-E), or reordering low stock from suppliers.\n"
-                "- ASK_SALES: asking about store status, sales numbers, inventory questions, or general conversation.\n\n"
-                f"Merchant said: \"{prompt}\"\n"
-                "Return JSON only: {\"intent\": \"WEEKEND_SALES\" | \"CUSTOMER_DUES\" | \"CLOSE_SHOP\" | \"ASK_SALES\"}"
+                "Classify the hospital staff or operator's spoken request into exactly one HospiOne workflow intent:\n"
+                "- CLINICAL_SCOPE_GUARD: medical questions, clinical diagnosis, medication dosage (antibiotics, paracetamol), symptoms, treatment.\n"
+                "- INVENTORY_REQUEST: requisition for medical consumables (gloves, masks, syringes, saline, surgical packs, consumables).\n"
+                "- CALL_DEPARTMENT: placing an outbound voice call or inquiry to hospital departments (biomedical engineering, facilities, reception, pharmacy, IT).\n"
+                "- FOLLOW_UPS: patient appointment follow-ups, discharge coordination, transportation, care continuity.\n"
+                "- MAINTENANCE_TICKET: facility repairs, room maintenance, biomedical equipment tickets, broken AC, electrical issues.\n"
+                "- PENDING_TASKS: querying pending operational tasks, duty rosters, work assignments.\n"
+                "- SCHEDULE_QUERY: daily hospital schedule, operational overview, department summaries.\n"
+                "- WEEKEND_SALES: retail promotional campaign (legacy).\n"
+                "- CUSTOMER_DUES: payment reminders (legacy).\n"
+                "- CLOSE_SHOP: closing retail shop (legacy).\n\n"
+                f"User said: \"{prompt}\"\n"
+                "Return JSON only: {\"intent\": \"CLINICAL_SCOPE_GUARD\" | \"INVENTORY_REQUEST\" | \"CALL_DEPARTMENT\" | \"FOLLOW_UPS\" | \"MAINTENANCE_TICKET\" | \"PENDING_TASKS\" | \"SCHEDULE_QUERY\" | \"CLOSE_SHOP\"}"
             )
             payload = {
                 "contents": [{"parts": [{"text": router_prompt}]}],
@@ -110,12 +194,11 @@ class OperatorAgentSession:
                     for part in parts:
                         if part.get("text") and not part.get("thought"):
                             parsed = json.loads(part["text"])
-                            intent = parsed.get("intent", "ASK_SALES")
-                            if intent in ("WEEKEND_SALES", "CUSTOMER_DUES", "CLOSE_SHOP", "ASK_SALES"):
-                                print(f"[TrueForge Router] Classified '{prompt}' -> {intent}")
-                                return intent
+                            intent = parsed.get("intent", "SCHEDULE_QUERY")
+                            print(f"[HospiOne Router] Classified '{prompt}' -> {intent}")
+                            return intent
         except Exception as e:
-            print(f"[TrueForge Router] Fallback notice: {e}")
+            print(f"[HospiOne Router] Fallback notice: {e}")
         return fast
 
     async def _generate_conversational_reply(self, user_prompt: str, sales_data: Dict[str, Any], profile_data: Dict[str, Any], inv_data: Dict[str, Any], dues_data: Dict[str, Any]) -> Optional[Dict[str, str]]:
@@ -204,6 +287,493 @@ class OperatorAgentSession:
             "provider": "Daytona Cloud Sandbox (TrueForge Code Mode)"
         }, thread_id=None)
         await asyncio.sleep(0.15)
+
+        # -------------------------------------------------------------
+        # BRANCH 0: CLINICAL SCOPE GUARD (Deterministic Redirection)
+        # -------------------------------------------------------------
+        if self.workflow_type == "CLINICAL_SCOPE_GUARD":
+            scope_markdown = (
+                "### 🛡️ Non-Clinical Operational Scope Notice\n\n"
+                "I am **HospiOne**, an AI operations and administrative assistant for hospital workflows.\n\n"
+                "- **Scope Policy:** I can help coordinate inventory requests, department communication (CALL-E), maintenance tickets, staff tasks, and administrative follow-ups.\n"
+                "- **Clinical Boundary:** I do not provide medical diagnosis, drug prescriptions, dosage recommendations, or clinical triage interpretation.\n"
+                "- **Action:** Please consult the attending doctor, clinical specialist, or patient care team."
+            )
+            scope_voice = (
+                "HospiOne is strictly operational and cannot diagnose patients or provide medication dosage advice. "
+                "Please consult a licensed physician or clinical medical doctor."
+            )
+            self.status = "COMPLETED"
+            yield self._create_event("CLINICAL_GUARD_TRIGGERED", {
+                "summary": "Clinical query rejected: Hospital Scope Guard strictly prevents medical diagnosis or medication dosage advice.",
+                "voice_text": scope_voice
+            })
+            yield self._create_event("model.message.delta", {
+                "content": scope_markdown,
+                "voice_text": scope_voice
+            })
+            yield self._create_event("turn.done", {
+                "state": {"status": "done", "output": {"content": scope_markdown}}
+            }, thread_id=None)
+            return
+
+        # -------------------------------------------------------------
+        # BRANCH H1: INVENTORY REQUEST WORKFLOW (Voice -> Prep -> Approval)
+        # -------------------------------------------------------------
+        if self.workflow_type == "INVENTORY_REQUEST":
+            yield self._create_event("model.message.delta", {
+                "content": f"Interpreting hospital inventory request (`{user_prompt}`)...\n\nQuerying central medical stores catalog and current safety buffers...",
+                "voice_text": "Checking hospital inventory catalog and current stock reserves right now."
+            })
+            await asyncio.sleep(0.4)
+
+            # Tool call: get_inventory
+            call_inv_id = f"call_{uuid.uuid4().hex[:8]}"
+            yield self._create_event("tool.call", {
+                "id": call_inv_id,
+                "tool_name": "get_inventory",
+                "agent_step": "Central Stores Agent: Checking medical supply inventory levels & reorder thresholds...",
+                "arguments": {"business_id": self.business_id, "low_stock_only": False}
+            })
+            inv_data = tool_get_inventory(self.business_id, low_stock_only=False)
+            yield self._create_event("tool.response", {"tool_call_id": call_inv_id, "content": inv_data})
+            await asyncio.sleep(0.4)
+
+            # Determine item and quantity from prompt
+            p_low = user_prompt.lower()
+            qty = 20
+            # extract number if present
+            import re
+            m = re.search(r'\b(\d+)\b', p_low)
+            if m:
+                try:
+                    qty = int(m.group(1))
+                except Exception:
+                    qty = 20
+
+            item_name = "Examination Gloves (Nitrile Powder-Free)"
+            sku = "MED-GLV-01"
+            unit = "boxes"
+            if "mask" in p_low:
+                item_name = "3-Ply Surgical Masks"
+                sku = "MED-MSK-02"
+                unit = "boxes"
+            elif "syringe" in p_low:
+                item_name = "Sterile Disposable Syringes 5ml"
+                sku = "MED-SYR-03"
+                unit = "boxes"
+            elif "sanitizer" in p_low:
+                item_name = "Hand Sanitizer 500ml"
+                sku = "MED-SAN-04"
+                unit = "bottles"
+            elif "n95" in p_low:
+                item_name = "N95 Particulate Respirator Masks"
+                sku = "MED-N95-05"
+                unit = "boxes"
+            elif "infusion" in p_low:
+                item_name = "IV Infusion Administration Sets"
+                sku = "MED-IVS-06"
+                unit = "packs"
+
+            # Stage action record for Human-in-the-Loop approval
+            action_id = f"act_inv_{uuid.uuid4().hex[:8]}"
+            self.active_action_id = action_id
+            db = SessionLocal()
+            try:
+                action = ActionRecord(
+                    id=action_id,
+                    business_id=self.business_id,
+                    task_id=turn_id,
+                    action_type="INVENTORY_REQUEST",
+                    status="WAITING_FOR_APPROVAL",
+                    title=f"Create Inventory Request: {qty} {unit} of {item_name}",
+                    rationale=f"Stock requisition for {qty} {unit} of {item_name} for OPD Nursing Station.",
+                    data_used={"item_name": item_name, "sku": sku, "quantity": qty, "unit": unit, "department": "OPD Nursing Station"},
+                    payload={
+                        "item_name": item_name,
+                        "sku": sku,
+                        "quantity": qty,
+                        "unit": unit,
+                        "department": "OPD Nursing Station",
+                        "requested_by": "Nurse Demo",
+                        "priority": "Standard"
+                    },
+                    estimated_cost=0.0
+                )
+                db.add(action)
+                db.commit()
+            finally:
+                db.close()
+
+            self.status = "WAITING_FOR_APPROVAL"
+            approval_call_id = f"call_approval_{uuid.uuid4().hex[:8]}"
+            approval_voice = (
+                f"I found an inventory item called {item_name}. "
+                f"Quantity requested: {qty} {unit}. "
+                f"This request requires human approval. Create the request?"
+            )
+
+            approval_event = self._create_event("tool.approval_required", {
+                "voice_text": approval_voice,
+                "tool_calls": [
+                    {
+                        "id": approval_call_id,
+                        "tool_name": "create_inventory_request",
+                        "action_id": action_id,
+                        "action_title": f"CREATE INVENTORY REQUEST — {item_name}",
+                        "item": item_name,
+                        "quantity": f"{qty} {unit}",
+                        "requested_by": "Nurse Demo",
+                        "department": "OPD Nursing Station",
+                        "rationale": f"Requisition for {qty} {unit} of {item_name} for hospital floor supply.",
+                        "data_used": {"item": item_name, "quantity": qty, "unit": unit, "department": "OPD Nursing Station"},
+                        "external_effect": f"Logs official requisition to Central Stores & updates HospiOne inventory operations queue.",
+                        "estimated_cost": 0.0,
+                        "arguments": {"action_id": action_id}
+                    }
+                ]
+            })
+            self.pending_approvals.append(approval_event)
+            yield approval_event
+
+            yield self._create_event("turn.done", {
+                "state": {"status": "done", "output": None, "required_actions": [approval_event]}
+            }, thread_id=None)
+            return
+
+        # -------------------------------------------------------------
+        # BRANCH H2: CALL DEPARTMENT (CALL-E Telephony -> Human Approval)
+        # -------------------------------------------------------------
+        if self.workflow_type == "CALL_DEPARTMENT":
+            yield self._create_event("model.message.delta", {
+                "content": f"Identifying department contact for spoken request (`{user_prompt}`)...\n\nQuerying HospiOne department directory & extensions...",
+                "voice_text": "Looking up hospital department directory and approved contact extensions."
+            })
+            await asyncio.sleep(0.4)
+
+            call_dir_id = f"call_{uuid.uuid4().hex[:8]}"
+            yield self._create_event("tool.call", {
+                "id": call_dir_id,
+                "tool_name": "get_department_directory",
+                "agent_step": "Directory Agent: Searching department extension & authorized duty lead...",
+                "arguments": {}
+            })
+            dir_res = tool_get_department_directory()
+            yield self._create_event("tool.response", {"tool_call_id": call_dir_id, "content": dir_res})
+            await asyncio.sleep(0.4)
+
+            p_low = user_prompt.lower()
+            dept_name = "Biomedical Engineering"
+            ext = "214"
+            purpose = "Maintenance request update"
+            contact_person = "Er. Ramesh K."
+            contact_phone = "+91 84960 74290"
+
+            if "reception" in p_low:
+                dept_name = "Reception & Patient Admissions"
+                ext = "101"
+                purpose = "Patient admission coordination"
+                contact_person = "Mrs. Kavita R."
+                contact_phone = "+91 80 4123 4501"
+            elif "stores" in p_low or "inventory" in p_low:
+                dept_name = "Central Hospital Stores"
+                ext = "305"
+                purpose = "Emergency stock inquiry"
+                contact_person = "Mr. Suresh Nair"
+                contact_phone = "+91 80 4123 4535"
+            elif "facilities" in p_low or "housekeeping" in p_low:
+                dept_name = "Facilities & Housekeeping"
+                ext = "118"
+                purpose = "Consultation room maintenance check"
+                contact_person = "Mr. Anand P."
+                contact_phone = "+91 80 4123 4518"
+            elif "it" in p_low or "systems" in p_low:
+                dept_name = "IT & Systems Support"
+                ext = "404"
+                purpose = "Terminal authentication assistance"
+                contact_person = "Ms. Shalini Murthy"
+                contact_phone = "+91 80 4123 4544"
+
+            action_id = f"act_call_{uuid.uuid4().hex[:8]}"
+            self.active_action_id = action_id
+            db = SessionLocal()
+            try:
+                action = ActionRecord(
+                    id=action_id,
+                    business_id=self.business_id,
+                    task_id=turn_id,
+                    action_type="CALL_DEPARTMENT",
+                    status="WAITING_FOR_APPROVAL",
+                    title=f"Call {dept_name} (Ext {ext})",
+                    rationale=f"Initiate telephony connection via CALL-E to {dept_name} regarding {purpose}.",
+                    data_used={"department": dept_name, "extension": ext, "contact": contact_person, "purpose": purpose},
+                    payload={
+                        "department": dept_name,
+                        "extension": ext,
+                        "contact_person": contact_person,
+                        "phone": contact_phone,
+                        "purpose": purpose,
+                        "initiated_by": "Dr. Demo (Voice)"
+                    },
+                    estimated_cost=0.0
+                )
+                db.add(action)
+                db.commit()
+            finally:
+                db.close()
+
+            self.status = "WAITING_FOR_APPROVAL"
+            approval_call_id = f"call_approval_{uuid.uuid4().hex[:8]}"
+            approval_voice = (
+                f"I identified the department as {dept_name}, extension {ext}. "
+                f"Purpose: {purpose}. "
+                f"This call requires your confirmation. Should I place the call?"
+            )
+
+            approval_event = self._create_event("tool.approval_required", {
+                "voice_text": approval_voice,
+                "tool_calls": [
+                    {
+                        "id": approval_call_id,
+                        "tool_name": "initiate_call",
+                        "action_id": action_id,
+                        "action_title": f"CALL {dept_name.upper()}",
+                        "department": dept_name,
+                        "extension": ext,
+                        "contact": contact_person,
+                        "purpose": purpose,
+                        "rationale": f"Place outbound voice call to {dept_name} at extension {ext} via CALL-E.",
+                        "data_used": {"department": dept_name, "extension": ext, "purpose": purpose, "phone": contact_phone},
+                        "external_effect": f"Dispatches live outbound voice call via CALL-E telephony engine to {contact_phone}.",
+                        "estimated_cost": 0.0,
+                        "arguments": {"action_id": action_id}
+                    }
+                ]
+            })
+            self.pending_approvals.append(approval_event)
+            yield approval_event
+
+            yield self._create_event("turn.done", {
+                "state": {"status": "done", "output": None, "required_actions": [approval_event]}
+            }, thread_id=None)
+            return
+
+        # -------------------------------------------------------------
+        # BRANCH H3: MAINTENANCE TICKET (Voice -> Approval -> Execution)
+        # -------------------------------------------------------------
+        if self.workflow_type == "MAINTENANCE_TICKET":
+            yield self._create_event("model.message.delta", {
+                "content": f"Processing facilities maintenance request (`{user_prompt}`)...\n\nAssigning priority and engineering duty desk...",
+                "voice_text": "Preparing maintenance ticket for OPD Consultation Room 302."
+            })
+            await asyncio.sleep(0.4)
+
+            action_id = f"act_maint_{uuid.uuid4().hex[:8]}"
+            self.active_action_id = action_id
+            db = SessionLocal()
+            try:
+                action = ActionRecord(
+                    id=action_id,
+                    business_id=self.business_id,
+                    task_id=turn_id,
+                    action_type="MAINTENANCE_TICKET",
+                    status="WAITING_FOR_APPROVAL",
+                    title="Maintenance Ticket: OPD Room 302 Air Conditioning",
+                    rationale="Reported cooling malfunction requiring HVAC technician inspection.",
+                    data_used={"location": "OPD Room 302", "issue": "Air conditioning maintenance", "priority": "Standard"},
+                    payload={
+                        "location": "OPD Room 302",
+                        "issue": "Air conditioning maintenance",
+                        "priority": "Standard",
+                        "created_by": "Dr. Demo"
+                    },
+                    estimated_cost=0.0
+                )
+                db.add(action)
+                db.commit()
+            finally:
+                db.close()
+
+            self.status = "WAITING_FOR_APPROVAL"
+            approval_call_id = f"call_approval_{uuid.uuid4().hex[:8]}"
+            approval_voice = (
+                "I have prepared a maintenance ticket for OPD Room 302 regarding air conditioning maintenance. "
+                "Priority: Standard. Create the ticket?"
+            )
+
+            approval_event = self._create_event("tool.approval_required", {
+                "voice_text": approval_voice,
+                "tool_calls": [
+                    {
+                        "id": approval_call_id,
+                        "tool_name": "create_maintenance_ticket",
+                        "action_id": action_id,
+                        "action_title": "CREATE MAINTENANCE TICKET",
+                        "location": "OPD Room 302",
+                        "issue": "Air conditioning maintenance",
+                        "priority": "Standard",
+                        "rationale": "HVAC service call for OPD Room 302 cooling malfunction.",
+                        "data_used": {"location": "OPD Room 302", "issue": "Air conditioning maintenance"},
+                        "external_effect": "Logs ticket in HospiOne operations maintenance queue and alerts facilities duty engineer.",
+                        "estimated_cost": 0.0,
+                        "arguments": {"action_id": action_id}
+                    }
+                ]
+            })
+            self.pending_approvals.append(approval_event)
+            yield approval_event
+
+            yield self._create_event("turn.done", {
+                "state": {"status": "done", "output": None, "required_actions": [approval_event]}
+            }, thread_id=None)
+            return
+
+        # -------------------------------------------------------------
+        # BRANCH H4: ADMINISTRATIVE FOLLOW-UPS
+        # -------------------------------------------------------------
+        if self.workflow_type == "FOLLOW_UPS":
+            yield self._create_event("model.message.delta", {
+                "content": "Retrieving today's continuity-of-care administrative follow-ups from HospiOne database...",
+                "voice_text": "Retrieving today's administrative patient follow-up coordination records."
+            })
+            await asyncio.sleep(0.4)
+
+            call_fol_id = f"call_{uuid.uuid4().hex[:8]}"
+            yield self._create_event("tool.call", {
+                "id": call_fol_id,
+                "tool_name": "get_followups",
+                "agent_step": "Care Coordination Agent: Ingesting administrative follow-up queue...",
+                "arguments": {"status": "Pending Contact"}
+            })
+            fol_res = tool_get_followups()
+            yield self._create_event("tool.response", {"tool_call_id": call_fol_id, "content": fol_res})
+            await asyncio.sleep(0.4)
+
+            total_fol = fol_res.get("count", 17)
+            top_fol = fol_res.get("followups", [])[:5]
+            rows_md = "\n".join(
+                f"- **{f['patient_id']}** ({f['department']}): {f['administrative_status']} • *Assigned: {f['assigned_staff']}*"
+                for f in top_fol
+            )
+            ans = (
+                f"### 📋 Today's Administrative Follow-ups Due ({total_fol} Records)\n\n"
+                f"{rows_md}\n\n"
+                f"> **Non-Clinical Notice:** These are administrative appointment reminders, insurance documentation, and discharge transport coordination tasks. No clinical risk scoring or clinical triage is performed."
+            )
+            voice_ans = (
+                f"You have {total_fol} administrative follow-ups due today across Cardiology, Orthopedics, and Outpatient Care. "
+                f"Patient PAT-00124 is scheduled for post-discharge transport coordination, and PAT-00125 requires insurance pre-authorization documentation."
+            )
+
+            self.status = "COMPLETED"
+            yield self._create_event("model.message.delta", {
+                "content": ans,
+                "voice_text": voice_ans
+            })
+            yield self._create_event("turn.done", {
+                "state": {"status": "done", "output": {"content": ans}}
+            }, thread_id=None)
+            return
+
+        # -------------------------------------------------------------
+        # BRANCH H5: PENDING TASKS QUERY
+        # -------------------------------------------------------------
+        if self.workflow_type == "PENDING_TASKS":
+            yield self._create_event("model.message.delta", {
+                "content": "Querying HospiOne active operational tasks across hospital departments...",
+                "voice_text": "Checking your active operational tasks right now."
+            })
+            await asyncio.sleep(0.4)
+
+            call_tasks_id = f"call_{uuid.uuid4().hex[:8]}"
+            yield self._create_event("tool.call", {
+                "id": call_tasks_id,
+                "tool_name": "get_pending_tasks",
+                "agent_step": "Task Coordinator: Ingesting open operational tasks...",
+                "arguments": {}
+            })
+            tasks_res = tool_get_pending_tasks()
+            yield self._create_event("tool.response", {"tool_call_id": call_tasks_id, "content": tasks_res})
+            await asyncio.sleep(0.4)
+
+            tasks_list = tasks_res.get("tasks", [])
+            tasks_count = tasks_res.get("count", 12)
+            tasks_md = "\n".join(
+                f"- **{t['task_id']}** `[{t['priority']}]` {t['title']} ({t['department']} • Assigned: {t['assigned_to']})"
+                for t in tasks_list[:5]
+            )
+            ans = (
+                f"### ⚡ Pending Operational Tasks ({tasks_count} Active)\n\n"
+                f"{tasks_md}\n\n"
+                f"- *Total open tasks across Biomedical, Stores, Reception, Facilities, and IT: {tasks_count}*"
+            )
+            voice_ans = (
+                f"There are {tasks_count} pending operational tasks today. "
+                f"High priority items include checking the biomedical maintenance request for ICU Ventilator 4, "
+                f"and reviewing an open examination glove inventory request for the OPD ward."
+            )
+
+            self.status = "COMPLETED"
+            yield self._create_event("model.message.delta", {
+                "content": ans,
+                "voice_text": voice_ans
+            })
+            yield self._create_event("turn.done", {
+                "state": {"status": "done", "output": {"content": ans}}
+            }, thread_id=None)
+            return
+
+        # -------------------------------------------------------------
+        # BRANCH H6: SCHEDULE & COMMAND CENTER SUMMARY
+        # -------------------------------------------------------------
+        if self.workflow_type == "SCHEDULE_QUERY":
+            yield self._create_event("model.message.delta", {
+                "content": "Loading HospiOne Hospital Operations Command Center status...",
+                "voice_text": "Here is the operational summary for HospiOne Hospital Operations Center."
+            })
+            await asyncio.sleep(0.4)
+
+            call_sum_id = f"call_{uuid.uuid4().hex[:8]}"
+            yield self._create_event("tool.call", {
+                "id": call_sum_id,
+                "tool_name": "get_operational_summary",
+                "agent_step": "Command Center Agent: Ingesting live hospital KPIs & department telemetry...",
+                "arguments": {}
+            })
+            sum_res = tool_get_operational_summary()
+            yield self._create_event("tool.response", {"tool_call_id": call_sum_id, "content": sum_res})
+            await asyncio.sleep(0.4)
+
+            m = sum_res.get("metrics", {})
+            ans = (
+                f"### 🏥 HospiOne Hospital Operations Command Center\n\n"
+                f"- **Pending Operational Tasks:** {m.get('pending_tasks', 12)}\n"
+                f"- **Calls Initiated Today (CALL-E):** {m.get('calls_today', 8)}\n"
+                f"- **Open Inventory Requests:** {m.get('inventory_requests', 5)}\n"
+                f"- **Administrative Follow-ups Due:** {m.get('followups_due', 17)}\n"
+                f"- **Hospital AI Devices Connected:** {m.get('devices_online', '3 / 4')}\n\n"
+                f"**Department Status:**\n"
+                f"- Reception & Admissions: Normal\n"
+                f"- Biomedical Engineering: 3 pending requests\n"
+                f"- Central Hospital Stores: 5 pending requests\n"
+                f"- Facilities & Housekeeping: 2 pending requests\n"
+                f"- IT & Systems Support: 4 pending requests"
+            )
+            voice_ans = (
+                f"HospiOne operations are nominal. Today you have {m.get('pending_tasks', 12)} pending tasks, "
+                f"{m.get('calls_today', 8)} department calls completed, {m.get('inventory_requests', 5)} open inventory requests, "
+                f"{m.get('followups_due', 17)} administrative follow-ups due, and 3 out of 4 AI devices connected."
+            )
+
+            self.status = "COMPLETED"
+            yield self._create_event("model.message.delta", {
+                "content": ans,
+                "voice_text": voice_ans
+            })
+            yield self._create_event("turn.done", {
+                "state": {"status": "done", "output": {"content": ans}}
+            }, thread_id=None)
+            return
 
         # -------------------------------------------------------------
         # BRANCH 1: ASK_SALES / CONVERSATIONAL STATUS & LIVE DB READ
@@ -1033,7 +1603,116 @@ print(json.dumps(output))
         self.status = "COMPLETED"
 
         # Construct customized final summaries & voice responses grounded in live DB & n8n execution
-        if action_type == "CAMPAIGN_BROADCAST":
+        if action_type == "INVENTORY_REQUEST":
+            p = action_record.payload if action_record else {}
+            exec_tool_name = "create_inventory_request"
+            yield self._create_event("tool.call", {
+                "id": call_exec_id,
+                "tool_name": exec_tool_name,
+                "agent_step": "Central Stores Agent: Submitting approved inventory requisition to HospiOne database...",
+                "arguments": p
+            })
+            exec_res = tool_create_inventory_request(
+                item_name=p.get("item_name", "Examination Gloves (Nitrile Powder-Free)"),
+                quantity=int(p.get("quantity", 20)),
+                unit=p.get("unit", "boxes"),
+                department=p.get("department", "OPD Nursing Station"),
+                requested_by=p.get("requested_by", "Nurse Demo"),
+                priority=p.get("priority", "Standard"),
+                rationale=action_record.rationale if action_record else ""
+            )
+            yield self._create_event("tool.response", {"tool_call_id": call_exec_id, "content": exec_res})
+            await asyncio.sleep(0.4)
+
+            req_id = exec_res.get("request_id", "REQ-1048")
+            self.status = "COMPLETED"
+            final_summary = f"""### 🏥 Inventory Request Created & Recorded
+
+- **Request ID:** `{req_id}`
+- **Item Requisitioned:** {exec_res.get('item_name')}
+- **Quantity:** {exec_res.get('quantity')} {exec_res.get('unit')}
+- **Department:** {exec_res.get('department')}
+- **Status:** Pending Approval / Central Stores Queue
+- **Requested By:** {p.get('requested_by', 'Nurse Demo')}
+- **Audit Verification:** Recorded in HospiOne immutable operational audit log
+"""
+            final_voice = (
+                f"Inventory request {req_id} for {exec_res.get('quantity')} {exec_res.get('unit')} of "
+                f"{exec_res.get('item_name')} created successfully."
+            )
+
+        elif action_type == "CALL_DEPARTMENT":
+            p = action_record.payload if action_record else {}
+            exec_tool_name = "initiate_call"
+            yield self._create_event("tool.call", {
+                "id": call_exec_id,
+                "tool_name": exec_tool_name,
+                "agent_step": f"CALL-E Voice Telephony: Connecting to {p.get('department')} (Ext {p.get('extension')})...",
+                "arguments": p
+            })
+            exec_res = tool_initiate_call(
+                department=p.get("department", "Biomedical Engineering"),
+                purpose=p.get("purpose", "Maintenance request update"),
+                initiated_by=p.get("initiated_by", "Dr. Demo (Voice)"),
+                recipient_phone=p.get("phone")
+            )
+            yield self._create_event("tool.response", {"tool_call_id": call_exec_id, "content": exec_res})
+            await asyncio.sleep(0.4)
+
+            call_id = exec_res.get("call_id", "CALL-8849")
+            dept_name = exec_res.get("department", "Biomedical Engineering")
+            ext = exec_res.get("extension", "214")
+            self.status = "COMPLETED"
+            final_summary = f"""### 📞 Outbound Department Call Initiated (CALL-E)
+
+- **Call ID:** `{call_id}`
+- **Department:** {dept_name} (Extension `{ext}`)
+- **Recipient:** {exec_res.get('recipient')}
+- **Purpose:** {exec_res.get('purpose')}
+- **Telephony Status:** `{exec_res.get('calle_status', 'LIVE_CALL_INITIATED')}`
+- **Channel:** CALL-E AI Voice Telephony (`api.heycall-e.com`)
+- **Audit:** Recorded in HospiOne call log & audit trail
+"""
+            final_voice = (
+                f"Call to {dept_name} extension {ext} initiated successfully via CALL-E. "
+                f"Status: Connected."
+            )
+
+        elif action_type == "MAINTENANCE_TICKET":
+            p = action_record.payload if action_record else {}
+            exec_tool_name = "create_maintenance_ticket"
+            yield self._create_event("tool.call", {
+                "id": call_exec_id,
+                "tool_name": exec_tool_name,
+                "agent_step": f"Engineering Dispatch: Creating maintenance ticket for {p.get('location')}...",
+                "arguments": p
+            })
+            exec_res = tool_create_maintenance_ticket(
+                location=p.get("location", "OPD Room 302"),
+                issue=p.get("issue", "Air conditioning maintenance"),
+                priority=p.get("priority", "Standard"),
+                created_by=p.get("created_by", "Dr. Demo")
+            )
+            yield self._create_event("tool.response", {"tool_call_id": call_exec_id, "content": exec_res})
+            await asyncio.sleep(0.4)
+
+            tid = exec_res.get("ticket_id", "TASK-1027")
+            self.status = "COMPLETED"
+            final_summary = f"""### 🔧 Maintenance Ticket Logged
+
+- **Ticket ID:** `{tid}`
+- **Location:** {exec_res.get('location')}
+- **Issue:** {exec_res.get('issue')}
+- **Department:** {exec_res.get('department')}
+- **Priority:** {exec_res.get('priority')}
+- **Status:** Pending Engineering Inspection
+"""
+            final_voice = (
+                f"Maintenance ticket {tid} for {exec_res.get('location')} created successfully "
+                f"and assigned to {exec_res.get('department')}."
+            )
+
+        elif action_type == "CAMPAIGN_BROADCAST":
             camp_id = exec_res.get("campaign_id", "CAMP-CONFIRMED")
             tg_status = exec_res.get("telegram_notification", {}).get("status", "READY")
             final_summary = f"""### 🚀 Campaign Broadcast Dispatched & Logged to Spreadsheet

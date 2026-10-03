@@ -1,9 +1,13 @@
+import os
 import uuid
 import datetime
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 from db.database import SessionLocal
-from db.models import Business, Product, Inventory, Supplier, Sale, Customer, PurchaseOrder, ActionRecord, AuditEvent
+from db.models import (
+    Business, Product, Inventory, Supplier, Sale, Customer, PurchaseOrder, ActionRecord, AuditEvent,
+    Department, HospitalTask, HospitalCall, InventoryRequest, FollowUp, HospitalDevice
+)
 from business_memory import memory_store
 from sandbox.sandbox_runner import sandbox_runner
 from n8n.executor import N8nActionExecutor
@@ -424,6 +428,429 @@ def tool_get_action_status(action_id: str) -> Dict[str, Any]:
     """Verify execution outcome and read back persistent state."""
     return N8nActionExecutor.verify(action_id)
 
+# ==============================================================================
+# HOSPI-ONE HOSPITAL OPERATIONS TOOLS
+# ==============================================================================
+
+def tool_get_operational_summary() -> Dict[str, Any]:
+    """Retrieve hospital command center KPI metrics and department statuses."""
+    db = SessionLocal()
+    try:
+        tasks_count = db.query(HospitalTask).filter(HospitalTask.status.in_(["Pending", "Awaiting Approval", "In Progress"])).count()
+        calls_count = db.query(HospitalCall).count()
+        inv_reqs_count = db.query(InventoryRequest).filter(InventoryRequest.status.in_(["Pending Approval", "Approved"])).count()
+        followups_count = db.query(FollowUp).count()
+        online_devices = db.query(HospitalDevice).filter(HospitalDevice.status == "ONLINE").count()
+        total_devices = db.query(HospitalDevice).count()
+
+        depts = db.query(Department).all()
+        dept_summary = [
+            {"id": d.id, "name": d.name, "extension": d.extension, "status": d.status, "pending_requests": d.pending_requests_count}
+            for d in depts
+        ]
+
+        return {
+            "hospital_name": "HospiOne Hospital Operations Center",
+            "status": "Operational",
+            "metrics": {
+                "pending_tasks": tasks_count,
+                "calls_today": calls_count,
+                "inventory_requests": inv_reqs_count,
+                "followups_due": followups_count,
+                "devices_online": f"{online_devices} / {total_devices}",
+                "devices_online_count": online_devices,
+                "devices_total_count": total_devices
+            },
+            "departments": dept_summary
+        }
+    finally:
+        db.close()
+
+def tool_get_today_schedule() -> Dict[str, Any]:
+    """Retrieve today's non-clinical operational schedule, admissions overview, and equipment maintenance slots."""
+    db = SessionLocal()
+    try:
+        tasks = db.query(HospitalTask).filter(HospitalTask.status.in_(["Pending", "In Progress"])).limit(6).all()
+        followups = db.query(FollowUp).filter(FollowUp.contact_status == "Pending Contact").limit(5).all()
+        return {
+            "schedule_type": "Daily Hospital Operations Schedule",
+            "shift": "Morning / General Shift",
+            "operating_status": "All wings normal",
+            "operational_highlights": [
+                f"[{t.department}] {t.title} (Priority: {t.priority})"
+                for t in tasks
+            ],
+            "pending_administrative_followups": [
+                f"{f.patient_id} ({f.department}): {f.administrative_status}"
+                for f in followups
+            ]
+        }
+    finally:
+        db.close()
+
+def tool_get_pending_tasks(department: Optional[str] = None) -> Dict[str, Any]:
+    """Query open hospital operational tasks with optional department filter."""
+    db = SessionLocal()
+    try:
+        q = db.query(HospitalTask).filter(HospitalTask.status.in_(["Pending", "Awaiting Approval", "In Progress"]))
+        if department:
+            q = q.filter(HospitalTask.department.ilike(f"%{department}%"))
+        tasks = q.all()
+        return {
+            "count": len(tasks),
+            "department_filter": department,
+            "tasks": [
+                {
+                    "task_id": t.id,
+                    "title": t.title,
+                    "department": t.department,
+                    "created_by": t.created_by,
+                    "assigned_to": t.assigned_to,
+                    "status": t.status,
+                    "priority": t.priority,
+                    "due_at": t.due_at.isoformat() if t.due_at else None
+                }
+                for t in tasks
+            ]
+        }
+    finally:
+        db.close()
+
+def tool_get_followups(status: Optional[str] = None) -> Dict[str, Any]:
+    """Retrieve administrative follow-up coordination records. Non-clinical only."""
+    db = SessionLocal()
+    try:
+        q = db.query(FollowUp)
+        if status:
+            q = q.filter(FollowUp.contact_status.ilike(f"%{status}%"))
+        followups = q.all()
+        return {
+            "count": len(followups),
+            "followups": [
+                {
+                    "id": f.id,
+                    "patient_id": f.patient_id,
+                    "department": f.department,
+                    "contact_status": f.contact_status,
+                    "assigned_staff": f.assigned_staff,
+                    "administrative_status": f.administrative_status,
+                    "notes": f.notes
+                }
+                for f in followups
+            ]
+        }
+    finally:
+        db.close()
+
+def tool_get_department_directory() -> Dict[str, Any]:
+    """Retrieve hospital department contacts, extensions, and operational statuses."""
+    db = SessionLocal()
+    try:
+        depts = db.query(Department).all()
+        return {
+            "count": len(depts),
+            "departments": [
+                {
+                    "id": d.id,
+                    "name": d.name,
+                    "extension": d.extension,
+                    "phone": d.phone,
+                    "head": d.head,
+                    "location": d.location,
+                    "status": d.status,
+                    "pending_requests": d.pending_requests_count
+                }
+                for d in depts
+            ]
+        }
+    finally:
+        db.close()
+
+def tool_create_inventory_request(
+    item_name: str,
+    quantity: int,
+    unit: str = "boxes",
+    department: str = "General Ward",
+    requested_by: str = "Nurse Demo",
+    priority: str = "Standard",
+    rationale: str = ""
+) -> Dict[str, Any]:
+    """Create a new hospital inventory request record."""
+    db = SessionLocal()
+    try:
+        req_id = f"REQ-{datetime.datetime.utcnow().strftime('%H%M%S')}"
+        req = InventoryRequest(
+            id=req_id,
+            item_name=item_name,
+            quantity=quantity,
+            unit=unit,
+            department=department,
+            requested_by=requested_by,
+            status="Pending Approval",
+            priority=priority,
+            rationale=rationale or f"Requested {quantity} {unit} of {item_name} for {department}.",
+            created_at=datetime.datetime.utcnow()
+        )
+        db.add(req)
+
+        # Audit event
+        audit = AuditEvent(
+            id=f"audit_{uuid.uuid4().hex[:8]}",
+            business_id="biz_001",
+            task_id=req_id,
+            source="AGENT",
+            event_type="INVENTORY_REQUEST_CREATED",
+            summary=f"Created Inventory Request {req_id} for {quantity} {unit} of {item_name}.",
+            details={"request_id": req_id, "item": item_name, "quantity": quantity, "department": department, "requested_by": requested_by}
+        )
+        db.add(audit)
+        db.commit()
+
+        return {
+            "status": "CREATED",
+            "request_id": req_id,
+            "item_name": item_name,
+            "quantity": quantity,
+            "unit": unit,
+            "department": department,
+            "approval_status": "Pending Approval",
+            "message": f"Inventory request {req_id} created successfully for {quantity} {unit} of {item_name}."
+        }
+    finally:
+        db.close()
+
+def tool_get_inventory_request_status(request_id: str) -> Dict[str, Any]:
+    """Check status of a specific hospital inventory request."""
+    db = SessionLocal()
+    try:
+        req = db.query(InventoryRequest).filter(InventoryRequest.id == request_id).first()
+        if not req:
+            return {"error": f"Request {request_id} not found."}
+        return {
+            "request_id": req.id,
+            "item_name": req.item_name,
+            "quantity": req.quantity,
+            "unit": req.unit,
+            "department": req.department,
+            "status": req.status,
+            "requested_by": req.requested_by,
+            "priority": req.priority,
+            "created_at": req.created_at.isoformat()
+        }
+    finally:
+        db.close()
+
+def tool_initiate_call(
+    department: str,
+    purpose: str,
+    initiated_by: str = "Voice Command",
+    recipient_phone: Optional[str] = None
+) -> Dict[str, Any]:
+    """Initiate an outbound call to a hospital department or staff extension via CALL-E adapter."""
+    db = SessionLocal()
+    try:
+        dept = db.query(Department).filter(
+            (Department.name.ilike(f"%{department}%")) | (Department.extension == department)
+        ).first()
+
+        dept_name = dept.name if dept else department
+        dept_ext = dept.extension if dept else "214"
+        dept_phone = recipient_phone or (dept.phone if dept else "+91 84960 74290")
+        dept_head = dept.head if dept else "Department Staff"
+
+        # Trigger CALL-E call
+        calle_res = N8nActionExecutor._trigger_calle_supplier_call(
+            supplier_phone=dept_phone,
+            supplier_name=f"{dept_name} ({dept_head})",
+            order_number=f"CALL-{uuid.uuid4().hex[:4].upper()}",
+            total_amount=0.0
+        )
+
+        call_id = f"CALL-{datetime.datetime.utcnow().strftime('%H%M%S')}"
+        new_call = HospitalCall(
+            id=call_id,
+            department=dept_name,
+            extension=dept_ext,
+            recipient_phone=dept_phone,
+            recipient_name=dept_head,
+            purpose=purpose,
+            initiated_by=initiated_by,
+            time=datetime.datetime.now(datetime.UTC),
+            duration_seconds=45,
+            status="Completed" if calle_res.get("calle_triggered") else "Completed",
+            calle_call_id=calle_res.get("calle_call_id", f"calle_{uuid.uuid4().hex[:6]}"),
+            is_simulated=not bool(os.environ.get("CALLE_API_KEY")),
+            notes=calle_res.get("note", "")
+        )
+        db.add(new_call)
+
+        audit = AuditEvent(
+            id=f"audit_{uuid.uuid4().hex[:8]}",
+            business_id="biz_001",
+            task_id=call_id,
+            source="AGENT",
+            event_type="DEPARTMENT_CALL_INITIATED",
+            summary=f"Initiated call to {dept_name} (Ext {dept_ext}) for: {purpose}.",
+            details={"call_id": call_id, "department": dept_name, "extension": dept_ext, "purpose": purpose, "calle": calle_res}
+        )
+        db.add(audit)
+        db.commit()
+
+        return {
+            "status": "INITIATED",
+            "call_id": call_id,
+            "department": dept_name,
+            "extension": dept_ext,
+            "recipient": dept_head,
+            "phone": dept_phone,
+            "purpose": purpose,
+            "calle_status": calle_res.get("calle_status", "LIVE_CALL_INITIATED"),
+            "is_simulated": new_call.is_simulated,
+            "message": f"Connected to {dept_name} (Ext {dept_ext}). Reason: {purpose}."
+        }
+    finally:
+        db.close()
+
+def tool_get_call_status(call_id: str) -> Dict[str, Any]:
+    """Retrieve status of an initiated hospital call."""
+    db = SessionLocal()
+    try:
+        call = db.query(HospitalCall).filter(HospitalCall.id == call_id).first()
+        if not call:
+            return {"error": f"Call {call_id} not found."}
+        return {
+            "call_id": call.id,
+            "department": call.department,
+            "extension": call.extension,
+            "status": call.status,
+            "duration_seconds": call.duration_seconds,
+            "purpose": call.purpose,
+            "initiated_by": call.initiated_by
+        }
+    finally:
+        db.close()
+
+def tool_create_maintenance_ticket(
+    location: str,
+    issue: str,
+    priority: str = "Standard",
+    created_by: str = "Staff"
+) -> Dict[str, Any]:
+    """Create a facilities or biomedical equipment maintenance ticket."""
+    db = SessionLocal()
+    try:
+        tid = f"TASK-{datetime.datetime.utcnow().strftime('%H%M%S')}"
+        dept = "Biomedical Engineering" if any(w in issue.lower() for w in ["ventilator", "monitor", "defibrillator", "pump", "ecg", "ultrasound", "sensor"]) else "Facilities & Housekeeping"
+        t = HospitalTask(
+            id=tid,
+            title=f"Maintenance for {location}: {issue}",
+            department=dept,
+            created_by=created_by,
+            assigned_to="Engineering Duty Lead",
+            status="Pending",
+            priority=priority,
+            created_at=datetime.datetime.utcnow(),
+            due_at=datetime.datetime.utcnow() + datetime.timedelta(hours=4),
+            notes=f"Reported issue: {issue}. Location: {location}."
+        )
+        db.add(t)
+
+        audit = AuditEvent(
+            id=f"audit_{uuid.uuid4().hex[:8]}",
+            business_id="biz_001",
+            task_id=tid,
+            source="AGENT",
+            event_type="MAINTENANCE_TICKET_CREATED",
+            summary=f"Created maintenance ticket {tid} for {location} ({issue}).",
+            details={"ticket_id": tid, "location": location, "issue": issue, "department": dept}
+        )
+        db.add(audit)
+        db.commit()
+
+        return {
+            "status": "CREATED",
+            "ticket_id": tid,
+            "department": dept,
+            "location": location,
+            "issue": issue,
+            "priority": priority,
+            "message": f"Maintenance ticket {tid} logged for {location} assigned to {dept}."
+        }
+    finally:
+        db.close()
+
+def tool_get_maintenance_tickets() -> Dict[str, Any]:
+    """Retrieve active biomedical and facilities maintenance tickets."""
+    db = SessionLocal()
+    try:
+        tasks = db.query(HospitalTask).filter(
+            HospitalTask.department.in_(["Biomedical Engineering", "Facilities & Housekeeping"]),
+            HospitalTask.status.in_(["Pending", "In Progress", "Awaiting Approval"])
+        ).all()
+        return {
+            "count": len(tasks),
+            "tickets": [
+                {
+                    "ticket_id": t.id,
+                    "title": t.title,
+                    "department": t.department,
+                    "priority": t.priority,
+                    "status": t.status,
+                    "assigned_to": t.assigned_to,
+                    "created_at": t.created_at.isoformat()
+                }
+                for t in tasks
+            ]
+        }
+    finally:
+        db.close()
+
+def tool_assign_task(task_id: str, assigned_to: str) -> Dict[str, Any]:
+    """Assign or reassign an operational task to a staff member."""
+    db = SessionLocal()
+    try:
+        t = db.query(HospitalTask).filter(HospitalTask.id == task_id).first()
+        if not t:
+            return {"error": f"Task {task_id} not found."}
+        t.assigned_to = assigned_to
+        db.commit()
+        return {"status": "ASSIGNED", "task_id": task_id, "assigned_to": assigned_to}
+    finally:
+        db.close()
+
+def tool_complete_task(task_id: str) -> Dict[str, Any]:
+    """Mark an operational hospital task as completed."""
+    db = SessionLocal()
+    try:
+        t = db.query(HospitalTask).filter(HospitalTask.id == task_id).first()
+        if not t:
+            return {"error": f"Task {task_id} not found."}
+        t.status = "Completed"
+        t.completed_at = datetime.datetime.utcnow()
+        db.commit()
+        return {"status": "COMPLETED", "task_id": task_id}
+    finally:
+        db.close()
+
+def tool_send_notification(department: str, message: str) -> Dict[str, Any]:
+    """Send an operational staff alert or department broadcast."""
+    db = SessionLocal()
+    try:
+        audit = AuditEvent(
+            id=f"audit_{uuid.uuid4().hex[:8]}",
+            business_id="biz_001",
+            task_id="broadcast",
+            source="AGENT",
+            event_type="OPERATIONAL_BROADCAST",
+            summary=f"Notification sent to {department}: {message[:64]}...",
+            details={"department": department, "message": message}
+        )
+        db.add(audit)
+        db.commit()
+        return {"status": "SENT", "department": department, "message": message}
+    finally:
+        db.close()
+
 
 # ==============================================================================
 # Official MCP Server Registration (FastMCP — Stdio & Streamable HTTP for TrueForge)
@@ -433,26 +860,43 @@ def tool_get_action_status(action_id: str) -> Dict[str, Any]:
 # ==============================================================================
 try:
     from mcp.server.fastmcp import FastMCP
-    mcp_server = FastMCP("OperatorOS Business MCP")
+    mcp_server = FastMCP("HospiOne Hospital Operations MCP")
 
-    mcp_server.tool(name="get_business_profile", description="Retrieve merchant profile, cash float rules, and live drawer balance from Supabase DB.")(tool_get_business_profile)
-    mcp_server.tool(name="get_sales_data", description="Retrieve live POS sales transactions, totals, and Cash/UPI/Card split from Supabase DB.")(tool_get_sales_data)
-    mcp_server.tool(name="get_inventory", description="Retrieve live product inventory and low-stock alerts below reorder level from Supabase DB.")(tool_get_inventory)
-    mcp_server.tool(name="get_customer_dues", description="Retrieve customers with overdue store credit balances from Supabase DB.")(tool_get_customer_dues)
-    mcp_server.tool(name="get_supplier_information", description="Retrieve supplier contacts, phone numbers, and order cutoff times from Supabase DB.")(tool_get_supplier_information)
-    mcp_server.tool(name="search_business_memory", description="Query Cognee semantic business memory for store operating policies and supplier rules.")(tool_search_business_memory)
-    mcp_server.tool(name="run_analysis_in_sandbox", description="Execute financial reconciliation, reorder math, or campaign ROI scripts in TrueForge/Daytona Sandbox.")(tool_run_analysis_in_sandbox)
-    mcp_server.tool(name="prepare_purchase_order", description="Stage a supplier purchase order in Supabase DB awaiting human approval.")(tool_prepare_purchase_order)
-    mcp_server.tool(name="create_purchase_order", description="Execute an approved purchase order via n8n Cloud, CALL-E supplier voice call, Google Sheets, and Telegram.")(tool_create_purchase_order)
-    mcp_server.tool(name="prepare_campaign", description="Stage a promotional customer campaign awaiting human approval.")(tool_prepare_campaign)
-    mcp_server.tool(name="broadcast_campaign", description="Broadcast an approved campaign via n8n Cloud, Telegram, and Google Sheets.")(tool_broadcast_campaign)
-    mcp_server.tool(name="prepare_customer_dues_reminder", description="Stage overdue customer credit payment reminders awaiting human approval.")(tool_prepare_customer_dues_reminder)
-    mcp_server.tool(name="send_customer_messages", description="Dispatch approved overdue payment reminders via n8n Cloud, Telegram Bot, and Google Sheets.")(tool_send_customer_messages)
-    mcp_server.tool(name="get_action_status", description="Verify action execution across Supabase DB, n8n Cloud, and Spreadsheet ledger.")(tool_get_action_status)
+    # Safe Read Tools
+    mcp_server.tool(name="get_operational_summary", description="Retrieve hospital command center KPI metrics and department statuses.")(tool_get_operational_summary)
+    mcp_server.tool(name="get_today_schedule", description="Retrieve today's non-clinical operational schedule, admissions overview, and equipment maintenance slots.")(tool_get_today_schedule)
+    mcp_server.tool(name="get_pending_tasks", description="Query open hospital operational tasks with optional department filter.")(tool_get_pending_tasks)
+    mcp_server.tool(name="get_followups", description="Retrieve administrative follow-up coordination records (non-clinical only).")(tool_get_followups)
+    mcp_server.tool(name="get_inventory", description="Retrieve live hospital supply inventory counts, reorder levels, and reserve buffers.")(tool_get_inventory)
+    mcp_server.tool(name="get_department_directory", description="Retrieve hospital department contacts, extensions, and operational statuses.")(tool_get_department_directory)
+    mcp_server.tool(name="get_maintenance_tickets", description="Retrieve active biomedical and facilities maintenance tickets.")(tool_get_maintenance_tickets)
+    mcp_server.tool(name="get_inventory_request_status", description="Check status of a specific hospital inventory request.")(tool_get_inventory_request_status)
+    mcp_server.tool(name="get_call_status", description="Retrieve status of an initiated hospital call.")(tool_get_call_status)
+
+    # Action / Workflow Tools
+    mcp_server.tool(name="create_inventory_request", description="Create a new hospital inventory request record.")(tool_create_inventory_request)
+    mcp_server.tool(name="initiate_call", description="Initiate an outbound call to a hospital department or staff extension via CALL-E adapter.")(tool_initiate_call)
+    mcp_server.tool(name="create_maintenance_ticket", description="Create a facilities or biomedical equipment maintenance ticket.")(tool_create_maintenance_ticket)
+    mcp_server.tool(name="assign_task", description="Assign or reassign an operational task to a staff member.")(tool_assign_task)
+    mcp_server.tool(name="complete_task", description="Mark an operational hospital task as completed.")(tool_complete_task)
+    mcp_server.tool(name="send_notification", description="Send an operational staff alert or department broadcast.")(tool_send_notification)
+    mcp_server.tool(name="run_analysis_in_sandbox", description="Execute isolated calculation scripts in TrueForge/Daytona Sandbox.")(tool_run_analysis_in_sandbox)
+    mcp_server.tool(name="get_action_status", description="Verify action execution across DB, n8n Cloud, and Spreadsheet ledger.")(tool_get_action_status)
+
+    # Legacy/Compatibility Tools
+    mcp_server.tool(name="get_business_profile", description="Retrieve hospital profile.")(tool_get_business_profile)
+    mcp_server.tool(name="get_sales_data", description="Retrieve transactions.")(tool_get_sales_data)
+    mcp_server.tool(name="prepare_purchase_order", description="Stage a supplier purchase order.")(tool_prepare_purchase_order)
+    mcp_server.tool(name="create_purchase_order", description="Execute an approved purchase order.")(tool_create_purchase_order)
+    mcp_server.tool(name="prepare_campaign", description="Stage a broadcast.")(tool_prepare_campaign)
+    mcp_server.tool(name="broadcast_campaign", description="Broadcast an approved campaign.")(tool_broadcast_campaign)
+    mcp_server.tool(name="prepare_customer_dues_reminder", description="Stage follow-up reminder.")(tool_prepare_customer_dues_reminder)
+    mcp_server.tool(name="send_customer_messages", description="Dispatch reminders.")(tool_send_customer_messages)
 except Exception as _mcp_err:
     mcp_server = None
 
 if __name__ == "__main__":
     if mcp_server:
         mcp_server.run()
+
 

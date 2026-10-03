@@ -170,8 +170,113 @@ class AuditEvent(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     business_id: Mapped[str] = mapped_column(String(64), ForeignKey("businesses.id"), nullable=False)
     task_id: Mapped[str] = mapped_column(String(64), default="")
-    source: Mapped[str] = mapped_column(String(64), default="AGENT")  # AGENT, TOOL, SANDBOX, HUMAN, N8N
+    source: Mapped[str] = mapped_column(String(64), default="AGENT")  # AGENT, TOOL, SANDBOX, HUMAN, N8N, VOICE
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     summary: Mapped[str] = mapped_column(String(256), nullable=False)
     details: Mapped[Any] = mapped_column(JSON, default=dict)
     timestamp: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
+
+# =====================================================================
+# HOSPI-ONE HOSPITAL OPERATIONS MODELS
+# =====================================================================
+
+class Department(Base):
+    __tablename__ = "hospital_departments"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    extension: Mapped[str] = mapped_column(String(32), default="")
+    phone: Mapped[str] = mapped_column(String(32), default="")
+    head: Mapped[str] = mapped_column(String(128), default="")
+    location: Mapped[str] = mapped_column(String(128), default="")
+    status: Mapped[str] = mapped_column(String(64), default="Normal")
+    pending_requests_count: Mapped[int] = mapped_column(Integer, default=0)
+    category: Mapped[str] = mapped_column(String(64), default="Operational")
+
+class HospitalTask(Base):
+    __tablename__ = "hospital_tasks"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    department: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(128), default="Staff")
+    assigned_to: Mapped[str] = mapped_column(String(128), default="Unassigned")
+    status: Mapped[str] = mapped_column(String(32), default="Pending")
+    # Statuses: Pending, Awaiting Approval, In Progress, Completed, Cancelled, Failed
+    priority: Mapped[str] = mapped_column(String(32), default="Standard")
+    # Priorities: Critical, High, Standard, Low
+    category: Mapped[str] = mapped_column(String(64), default="Operational")
+    due_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
+    completed_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+class HospitalCall(Base):
+    __tablename__ = "hospital_calls"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    department: Mapped[str] = mapped_column(String(128), nullable=False)
+    extension: Mapped[str] = mapped_column(String(32), default="")
+    recipient_phone: Mapped[str] = mapped_column(String(32), default="")
+    recipient_name: Mapped[str] = mapped_column(String(128), default="")
+    purpose: Mapped[str] = mapped_column(String(256), nullable=False)
+    initiated_by: Mapped[str] = mapped_column(String(128), default="Voice Command")
+    time: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
+    duration_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(32), default="Completed")
+    # Statuses: Completed, In Progress, No Answer, Cancelled, Demo
+    calle_call_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    is_simulated: Mapped[bool] = mapped_column(Boolean, default=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+class InventoryRequest(Base):
+    __tablename__ = "hospital_inventory_requests"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    item_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    sku: Mapped[str] = mapped_column(String(64), default="")
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+    unit: Mapped[str] = mapped_column(String(32), default="boxes")
+    department: Mapped[str] = mapped_column(String(128), default="General Ward")
+    requested_by: Mapped[str] = mapped_column(String(128), default="Nurse Demo")
+    status: Mapped[str] = mapped_column(String(32), default="Pending Approval")
+    # Statuses: Pending Approval, Approved, In Transit, Fulfilled, Rejected
+    priority: Mapped[str] = mapped_column(String(32), default="Standard")
+    rationale: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
+    approved_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    approved_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+
+class FollowUp(Base):
+    __tablename__ = "hospital_followups"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    patient_id: Mapped[str] = mapped_column(String(64), nullable=False)  # Synthetic ID e.g. PAT-00124
+    department: Mapped[str] = mapped_column(String(128), default="Outpatient Coordination")
+    last_contact: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
+    next_scheduled: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
+    contact_status: Mapped[str] = mapped_column(String(32), default="Scheduled")
+    # Statuses: Scheduled, Pending Contact, Contacted, Rescheduled, Unable to Reach, Completed
+    assigned_staff: Mapped[str] = mapped_column(String(128), default="Coordination Nurse")
+    administrative_status: Mapped[str] = mapped_column(String(128), default="Appointment Reminder Due")
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+class HospitalDevice(Base):
+    __tablename__ = "hospital_devices"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    location: Mapped[str] = mapped_column(String(128), nullable=False)
+    hardware_type: Mapped[str] = mapped_column(String(128), default="ESP32 SPI TFT / Prototype")
+    status: Mapped[str] = mapped_column(String(32), default="ONLINE")
+    # Statuses: ONLINE, OFFLINE, LISTENING, PROCESSING, AWAITING_APPROVAL, EXECUTING
+    mic_status: Mapped[str] = mapped_column(String(32), default="Ready")
+    speaker_status: Mapped[str] = mapped_column(String(32), default="Ready")
+    display_status: Mapped[str] = mapped_column(String(64), default="Ready (320x240 TFT)")
+    network_status: Mapped[str] = mapped_column(String(64), default="Connected (Wi-Fi 5GHz)")
+    last_heartbeat: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
+    current_user: Mapped[str] = mapped_column(String(128), default="Reception Staff")
+    last_command: Mapped[str] = mapped_column(String(256), default="Ready for voice commands")
+    software_version: Mapped[str] = mapped_column(String(32), default="v2.4.0-hospi")
+    firmware_version: Mapped[str] = mapped_column(String(32), default="esp32-v1.8.2")
+

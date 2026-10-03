@@ -113,33 +113,36 @@ class N8nActionExecutor:
 
     @staticmethod
     def _trigger_calle_supplier_call(
-        order_number: str,
-        supplier_name: str,
-        supplier_phone: str,
-        items: List[Dict[str, Any]],
-        total_amount: float,
-        action_id: str,
-        business_id: str
+        order_number: str = "CALL-001",
+        supplier_name: str = "Hospital Department",
+        supplier_phone: str = "+918496074290",
+        items: Optional[List[Dict[str, Any]]] = None,
+        total_amount: float = 0.0,
+        action_id: str = "act_001",
+        business_id: str = "biz_001",
+        **kwargs
     ) -> Dict[str, Any]:
         """
-        Places a real outbound AI phone call to the supplier via CALL-E (https://api.heycall-e.com/v1/calls)
-        to verbally place the purchase order and confirm tomorrow 6:00 AM delivery.
+        Places a real outbound AI phone call to a department or supplier via CALL-E (https://api.heycall-e.com/v1/calls).
         """
         _refresh_env()
+        order_num = kwargs.get("po_number", order_number)
         calle_key = os.environ.get("CALLE_API_KEY", "").strip()
         calle_base = os.environ.get("CALLE_BASE_URL", "https://api.heycall-e.com").strip().rstrip("/")
-        target_phone = os.environ.get("SUPPLIER_PHONE_NUMBER", "").strip() or supplier_phone or "+919876543210"
+        target_phone = os.environ.get("SUPPLIER_PHONE_NUMBER", "").strip() or supplier_phone or "+918496074290"
 
-        items_spoken = (
-            ", ".join(f"{it.get('quantity', 1)} units of {it.get('name', 'Item')}" for it in items)
-            if items else "25 liters of A2 Farm Milk, 20 packs of Organic Eggs, 10 Sourdough Loaves, and 15 tubs of Greek Yogurt"
-        )
-        task_prompt = (
-            f"Call {target_phone} ({supplier_name}). You are OperatorOS calling on behalf of Rajesh Kumar, "
-            f"owner of Green Valley Organic Grocers in Indiranagar, Bengaluru. "
-            f"Place purchase order {order_number} for tomorrow 6:00 AM delivery: {items_spoken}, "
-            f"totaling {int(total_amount)} rupees. Ask the supplier to confirm stock availability and delivery."
-        )
+        if items:
+            items_spoken = ", ".join(f"{it.get('quantity', 1)} units of {it.get('name', 'Item')}" for it in items)
+            task_prompt = (
+                f"Call {target_phone} ({supplier_name}). You are HospiOne Operations calling on behalf of Dr. Arvind Rao. "
+                f"Place urgent hospital operational request {order_num} for medical supplies: {items_spoken}."
+            )
+        else:
+            task_prompt = (
+                f"Call {target_phone} ({supplier_name}). You are HospiOne Operations calling on behalf of Dr. Arvind Rao. "
+                f"This is an urgent operational inquiry regarding pending maintenance request {order_num}."
+            )
+
 
         if not calle_key:
             return {
