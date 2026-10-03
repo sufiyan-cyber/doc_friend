@@ -693,6 +693,7 @@ def _mirror_to_trueforge_bg(prompt: str):
 
 # Start an Operator Task
 @app.post("/api/tasks")
+@app.post("/api/tasks/create")
 async def create_task(req: CreateTaskRequest):
     global LAST_ACTIVE_LANGUAGE
     task_id = f"task_{uuid.uuid4().hex[:8]}"

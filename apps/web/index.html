@@ -405,6 +405,7 @@
       const [voiceEnabled, setVoiceEnabled] = useState(true);
       const [isSpeaking, setIsSpeaking] = useState(false);
       const [currentSpokenLine, setCurrentSpokenLine] = useState("");
+      const [latestResponse, setLatestResponse] = useState(null);
       const [activeAgentStep, setActiveAgentStep] = useState("");
       const [voiceHistory, setVoiceHistory] = useState([]);
       const [activeTab, setActiveTab] = useState("overview");
@@ -435,6 +436,7 @@
 
       // Refs
       const eventEndRef = useRef(null);
+      const audioElementRef = useRef(null);
       const recognitionRef = useRef(null);
       const mediaRecorderRef = useRef(null);
       const audioChunksRef = useRef([]);
@@ -621,17 +623,16 @@
       const speechQueueRef = useRef([]);
       const isSpeakingInternalRef = useRef(false);
 
-      const speakImmediate = (text, lang = "en-IN") => {
-        if (!voiceEnabledRef.current || !text) return;
-        stopSpeaking();
-        setCurrentSpokenLine(text);
-        setIsSpeaking(true);
-        isSpeakingRef.current = true;
-        isSpeakingInternalRef.current = true;
-
-        if ('speechSynthesis' in window) {
+      const fallbackSpeechSynthesis = (cleanText, lang = "en-IN") => {
+        if (!('speechSynthesis' in window)) {
+          setIsSpeaking(false);
+          isSpeakingRef.current = false;
+          isSpeakingInternalRef.current = false;
+          return;
+        }
+        try {
           window.speechSynthesis.cancel();
-          const utterance = new SpeechSynthesisUtterance(text);
+          const utterance = new SpeechSynthesisUtterance(cleanText);
           utterance.lang = lang === "kn-IN" ? "kn-IN" : lang === "hi-IN" ? "hi-IN" : "en-IN";
           utterance.rate = 1.0;
           utterance.pitch = 1.0;
@@ -649,12 +650,73 @@
             isSpeakingInternalRef.current = false;
           };
           window.speechSynthesis.speak(utterance);
+        } catch (e) {
+          console.warn("[SpeechSynthesis Exception]", e);
+          setIsSpeaking(false);
+          isSpeakingRef.current = false;
+          isSpeakingInternalRef.current = false;
+        }
+      };
+
+      const speakImmediate = (text, lang = null) => {
+        if (!voiceEnabledRef.current || !text) return;
+        const targetLang = lang || getEffectiveLanguage();
+        const cleanText = text.replace(/[*#`_~]/g, "").trim();
+        if (!cleanText) return;
+
+        stopSpeaking();
+        setCurrentSpokenLine(cleanText);
+        setIsSpeaking(true);
+        isSpeakingRef.current = true;
+        isSpeakingInternalRef.current = true;
+
+        try {
+          if (!audioElementRef.current) {
+            audioElementRef.current = new Audio();
+          }
+          const audio = audioElementRef.current;
+          audio.pause();
+          audio.currentTime = 0;
+
+          const ttsUrl = `/api/tts?text=${encodeURIComponent(cleanText.slice(0, 500))}&lang=${encodeURIComponent(targetLang)}`;
+          audio.src = ttsUrl;
+
+          audio.onended = () => {
+            setIsSpeaking(false);
+            isSpeakingRef.current = false;
+            isSpeakingInternalRef.current = false;
+            if (handsFreeModeRef.current && voiceModeOpenRef.current && !isListeningRef.current) {
+              startListeningSession();
+            }
+          };
+
+          audio.onerror = () => {
+            console.warn("[Neural TTS Error, falling back to Web Speech API]");
+            fallbackSpeechSynthesis(cleanText, targetLang);
+          };
+
+          const playPromise = audio.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((err) => {
+              console.warn("[Neural Audio Autoplay Blocked, attempting fallback]", err);
+              fallbackSpeechSynthesis(cleanText, targetLang);
+            });
+          }
+        } catch (e) {
+          console.warn("[Audio Playback Exception]", e);
+          fallbackSpeechSynthesis(cleanText, targetLang);
         }
       };
 
       const stopSpeaking = () => {
+        try {
+          if (audioElementRef.current) {
+            audioElementRef.current.pause();
+            audioElementRef.current.currentTime = 0;
+          }
+        } catch (e) {}
         if ('speechSynthesis' in window) {
-          window.speechSynthesis.cancel();
+          try { window.speechSynthesis.cancel(); } catch (e) {}
         }
         setIsSpeaking(false);
         isSpeakingRef.current = false;
@@ -741,9 +803,11 @@
         setIsStreaming(true);
         setSessionStatus("RUNNING");
         setActiveAgentStep("Hospital Agent routing operational intent...");
+        setLatestResponse(null);
+        playChime("ack");
 
         const instantAck = getInstantVocalAck(queryText);
-        speakImmediate(instantAck);
+        setCurrentSpokenLine(instantAck);
 
         const newTaskId = `task_${Date.now()}`;
         setActiveTaskId(newTaskId);
@@ -785,24 +849,52 @@
               const evt = JSON.parse(event.data);
               setEvents((prev) => [...prev, evt]);
 
+              if (evt.content) {
+                setLatestResponse({
+                  content: evt.content,
+                  voice_text: evt.voice_text || "",
+                  type: evt.type,
+                  timestamp: evt.created_at || new Date().toISOString()
+                });
+              }
+
+              if (evt.agent_step) {
+                setActiveAgentStep(evt.agent_step);
+              }
+
               if (evt.voice_text) {
                 speakImmediate(evt.voice_text, evt.language_code || getEffectiveLanguage());
               }
 
-              if (evt.type === "WAITING_APPROVAL") {
+              if (evt.type === "WAITING_APPROVAL" || evt.type === "tool.approval_required") {
+                const toolCall = evt.tool_calls?.[0] || {};
                 setSessionStatus("WAITING_APPROVAL");
                 setPendingApproval({
-                  action_title: evt.action_title || "Hospital Operation Approval Gate",
-                  department: evt.department || "Operations",
-                  rationale: evt.rationale || evt.summary || "Requires staff approval before execution."
+                  action_id: toolCall.action_id || evt.action_id,
+                  action_title: toolCall.action_title || evt.action_title || "Hospital Operation Approval Gate",
+                  department: toolCall.department || evt.department || "Operations",
+                  rationale: toolCall.rationale || evt.rationale || evt.summary || "Requires staff approval before execution."
                 });
                 playChime("approval");
               }
 
-              if (evt.type === "TASK_COMPLETED" || evt.type === "CLINICAL_GUARD_TRIGGERED" || evt.type === "COMPLETE") {
+              if (evt.type === "turn.done" || evt.type === "TASK_COMPLETED" || evt.type === "CLINICAL_GUARD_TRIGGERED" || evt.type === "COMPLETE") {
                 setIsStreaming(false);
                 setSessionStatus("COMPLETED");
                 setActiveAgentStep("Execution complete.");
+
+                if (evt.state?.output?.content) {
+                  setLatestResponse(prev => ({
+                    content: evt.state.output.content,
+                    voice_text: evt.state.output.voice_text || prev?.voice_text || "",
+                    type: "turn.done",
+                    timestamp: evt.created_at || new Date().toISOString()
+                  }));
+                }
+                if (evt.state?.output?.voice_text && !isSpeakingRef.current) {
+                  speakImmediate(evt.state.output.voice_text, evt.language_code || getEffectiveLanguage());
+                }
+
                 eventSource.close();
                 fetchAllHospitalData();
               }
@@ -1345,6 +1437,44 @@
                     onReplay={currentSpokenLine ? () => speakImmediate(currentSpokenLine) : null}
                   />
 
+                  {/* Dedicated HospiOne Operations Response Card */}
+                  {latestResponse && (
+                    <SerifCard
+                      accentTop={true}
+                      elevated={true}
+                      label="AI Operational Response"
+                      title="HospiOne Operations Summary"
+                      headerRight={
+                        <div className="flex items-center gap-2">
+                          <SerifButton
+                            variant="primary"
+                            size="xs"
+                            onClick={() => speakImmediate(latestResponse.voice_text || latestResponse.content)}>
+                            <i className="fa-solid fa-volume-high mr-1"></i>
+                            <span>Listen to Voice Response 🔊</span>
+                          </SerifButton>
+                        </div>
+                      }>
+                      <div className="space-y-3">
+                        <div className="text-sm text-[#1A1A1A] leading-relaxed whitespace-pre-line bg-[#FAFAF8] p-3.5 rounded border border-[#E8E4DF] font-sans">
+                          {latestResponse.content}
+                        </div>
+                        {latestResponse.voice_text && (
+                          <div className="p-2.5 bg-[#F5F3F0] rounded border border-[#E8E4DF] flex items-center justify-between gap-3 text-xs text-[#6B6B6B]">
+                            <span className="font-mono italic truncate">
+                              &ldquo;{latestResponse.voice_text}&rdquo;
+                            </span>
+                            <button
+                              onClick={() => speakImmediate(latestResponse.voice_text)}
+                              className="text-[#B8860B] hover:underline shrink-0 font-medium font-sans">
+                              Replay Audio
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </SerifCard>
+                  )}
+
                   {/* Human-in-the-Loop Approval Gate */}
                   {sessionStatus === "WAITING_APPROVAL" && pendingApproval && (
                     <SerifCard
@@ -1406,7 +1536,7 @@
                       ) : (
                         events.map((evt, idx) => {
                           const isUser = evt.type === "USER_INPUT";
-                          const isApproval = evt.type === "WAITING_APPROVAL";
+                          const isApproval = evt.type === "WAITING_APPROVAL" || evt.type === "tool.approval_required";
                           const isScopeGuard = evt.type === "CLINICAL_GUARD_TRIGGERED";
                           return (
                             <div
@@ -1424,7 +1554,46 @@
                                 <span className="font-semibold text-[#B8860B]">{evt.type || "EVENT"}</span>
                                 <span>{evt.created_at ? new Date(evt.created_at).toLocaleTimeString() : ""}</span>
                               </div>
-                              <p className="font-sans text-sm">{evt.summary || evt.message || JSON.stringify(evt)}</p>
+                              <div className="font-sans text-sm">
+                                {evt.content ? (
+                                  <div className="whitespace-pre-line bg-[#FAFAF8] p-2 rounded border border-[#E8E4DF] text-xs">
+                                    {evt.content}
+                                  </div>
+                                ) : evt.summary ? (
+                                  <p>{evt.summary}</p>
+                                ) : evt.message ? (
+                                  <p>{evt.message}</p>
+                                ) : evt.voice_text ? (
+                                  <p className="italic text-[#6B6B6B]">&ldquo;{evt.voice_text}&rdquo;</p>
+                                ) : evt.type === "tool.call" ? (
+                                  <p className="font-mono text-xs text-blue-700">
+                                    <i className="fa-solid fa-gear fa-spin mr-1"></i>
+                                    {evt.agent_step || `Invoking tool: ${evt.tool_name}`}
+                                  </p>
+                                ) : evt.type === "tool.response" ? (
+                                  <p className="font-mono text-xs text-emerald-700">
+                                    <i className="fa-solid fa-check mr-1"></i>
+                                    Telemetry data received from hospital database
+                                  </p>
+                                ) : evt.type === "tool.approval_required" ? (
+                                  <p className="font-semibold text-amber-800">
+                                    Human approval checkpoint: {evt.tool_calls?.[0]?.action_title || "Hospital Operation"}
+                                  </p>
+                                ) : evt.type === "turn.done" ? (
+                                  <p className="font-mono text-xs text-emerald-700">
+                                    <i className="fa-solid fa-circle-check mr-1"></i>
+                                    HospiOne operational turn completed.
+                                  </p>
+                                ) : evt.type === "turn.created" ? (
+                                  <p className="font-mono text-xs text-[#6B6B6B]">
+                                    Operational workflow started: {evt.intent || "Command"}
+                                  </p>
+                                ) : (
+                                  <pre className="text-[10px] overflow-x-auto text-[#6B6B6B]">
+                                    {JSON.stringify(evt, null, 2)}
+                                  </pre>
+                                )}
+                              </div>
                               {evt.details && (
                                 <pre className="mt-1.5 p-2 bg-[#FAFAF8] rounded border border-[#E8E4DF] text-[10px] overflow-x-auto text-[#6B6B6B]">
                                   {JSON.stringify(evt.details, null, 2)}
@@ -2263,6 +2432,21 @@
                     attribution={isListening ? "Live Microphone Input" : "HospiOne Vocal Output"}
                   />
                 </div>
+
+                {latestResponse && (
+                  <div className="text-left bg-white p-4 rounded-lg border border-[#E8E4DF] shadow-sm space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="small-caps text-[#B8860B]">HospiOne Operational Summary</span>
+                      <SerifButton variant="outline" size="xs" onClick={() => speakImmediate(latestResponse.voice_text || latestResponse.content)}>
+                        <i className="fa-solid fa-volume-high mr-1"></i>
+                        <span>Replay Audio</span>
+                      </SerifButton>
+                    </div>
+                    <div className="text-xs text-[#1A1A1A] leading-relaxed whitespace-pre-line font-sans">
+                      {latestResponse.content}
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex flex-wrap items-center justify-center gap-2">
                   {[

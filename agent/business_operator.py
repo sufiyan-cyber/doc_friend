@@ -204,7 +204,7 @@ class OperatorAgentSession:
     async def _generate_conversational_reply(self, user_prompt: str, sales_data: Dict[str, Any], profile_data: Dict[str, Any], inv_data: Dict[str, Any], dues_data: Dict[str, Any]) -> Optional[Dict[str, str]]:
         """
         Calls Gemini 3 Flash (MINIMAL thinking) to generate a real-time human-like conversational response
-        grounded in live store telemetry when the user asks custom questions.
+        grounded in live hospital telemetry when the user asks custom questions.
         """
         import httpx
         llm_key = os.environ.get("LLM_API_KEY", "").strip()
@@ -212,27 +212,25 @@ class OperatorAgentSession:
             return None
 
         p_lower = user_prompt.lower().strip()
-        # Use instant deterministic DB-grounded reply for standard status/sales queries so response is <50ms!
-        if any(w in p_lower for w in ["status", "what were my sales", "total sales", "sales today", "how much did we make", "how is my shop"]):
-            return None
-
         try:
             gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={llm_key}"
-            low_items_names = ", ".join(it.get("name", "") for it in inv_data.get("low_stock_items", []))
-            cust_summary = ", ".join(f"{c.get('name')} Rs {int(c.get('outstanding_due', 0))}" for c in dues_data.get("customers", []))
+            summary_info = tool_get_operational_summary()
+            metrics = summary_info.get("metrics", {})
             sys_prompt = (
-                "You are OperatorOS, a warm, sharp, human-like AI store manager talking out loud in real time to Rajesh-ji, "
-                f"owner of {profile_data.get('name', 'Green Valley Organic Grocers')} in Indiranagar, Bengaluru.\n"
-                f"Live Database Facts right now:\n"
-                f"- Today's Gross Sales: Rs {int(sales_data.get('total_sales_amount', 0))} across {sales_data.get('total_transactions', 0)} orders "
-                f"(Cash: Rs {int(sales_data['breakdown']['cash'])}, UPI: Rs {int(sales_data['breakdown']['upi'])}, Card: Rs {int(sales_data['breakdown']['card'])})\n"
-                f"- Cash in Drawer: Rs {int(profile_data.get('current_cash_in_drawer', 0))} (Rs {int(profile_data.get('opening_cash', 5000))} float)\n"
-                f"- Low Stock Alert: {inv_data.get('count', 0)} items ({low_items_names}) below reorder level before 8 PM MilkyWay cutoff\n"
-                f"- Overdue Customer Dues: Rs {int(dues_data.get('total_overdue_amount', 0))} across {dues_data.get('overdue_customers_count', 0)} accounts ({cust_summary})\n\n"
-                f"User said: \"{user_prompt}\"\n\n"
+                "You are HospiOne, an empathetic, precise, professional voice-first AI operations assistant for hospitals. "
+                "You assist doctors, nurses, and administrative staff with non-clinical operational coordination.\n"
+                "Live Hospital Operational Status right now:\n"
+                f"- Hospital Facility: HospiOne Hospital Operations Center (Bengaluru Campus)\n"
+                f"- Pending Operational Tasks: {metrics.get('pending_tasks', 9)} across Biomedical, Facilities, Stores, IT\n"
+                f"- Today's Outbound Calls (CALL-E): {metrics.get('calls_today', 8)} department calls\n"
+                f"- Pending Inventory Requisitions: {metrics.get('inventory_requests', 5)} (examination gloves, saline, surgical masks)\n"
+                f"- Administrative Follow-ups Due: {metrics.get('followups_due', 17)} continuity-of-care records\n"
+                f"- Connected AI Hardware Devices: {metrics.get('devices_online', '3 / 4')} online\n"
+                "IMPORTANT NON-CLINICAL RULE: NEVER provide clinical diagnosis, drug dosages, or medical treatment advice.\n\n"
+                f"User asked/said: \"{user_prompt}\"\n\n"
                 "Respond in valid JSON with two keys:\n"
-                "1. \"voice_text\": 2 to 3 natural spoken sentences (no markdown symbols, no rupee symbols—say 'rupees') answering Rajesh-ji directly using the exact live database numbers above. IMPORTANT: NEVER start with 'Namaste', 'Hello', or 'Hi'—answer directly.\n"
-                "2. \"markdown\": Concise formatted markdown summary matching your spoken response."
+                "1. \"voice_text\": 1 to 3 clear, warm spoken sentences answering the user directly based on live hospital operations.\n"
+                "2. \"markdown\": Formatted markdown summary with bullet points matching your response."
             )
             payload = {
                 "contents": [{"parts": [{"text": sys_prompt}]}],
@@ -666,12 +664,16 @@ class OperatorAgentSession:
             )
 
             self.status = "COMPLETED"
+            yield self._create_event("TASK_COMPLETED", {
+                "summary": f"Retrieved {total_fol} administrative follow-up records.",
+                "voice_text": voice_ans
+            })
             yield self._create_event("model.message.delta", {
                 "content": ans,
                 "voice_text": voice_ans
             })
             yield self._create_event("turn.done", {
-                "state": {"status": "done", "output": {"content": ans}}
+                "state": {"status": "done", "output": {"content": ans, "voice_text": voice_ans}}
             }, thread_id=None)
             return
 
@@ -714,12 +716,16 @@ class OperatorAgentSession:
             )
 
             self.status = "COMPLETED"
+            yield self._create_event("TASK_COMPLETED", {
+                "summary": f"Retrieved {tasks_count} active operational tasks.",
+                "voice_text": voice_ans
+            })
             yield self._create_event("model.message.delta", {
                 "content": ans,
                 "voice_text": voice_ans
             })
             yield self._create_event("turn.done", {
-                "state": {"status": "done", "output": {"content": ans}}
+                "state": {"status": "done", "output": {"content": ans, "voice_text": voice_ans}}
             }, thread_id=None)
             return
 
@@ -759,19 +765,27 @@ class OperatorAgentSession:
                 f"- Facilities & Housekeeping: 2 pending requests\n"
                 f"- IT & Systems Support: 4 pending requests"
             )
+            p_clean = user_prompt.lower().strip()
+            is_greeting = any(g in p_clean for g in ["hello", "hi", "hey", "namaste", "good morning", "good evening", "good afternoon"])
+            greeting_voice = "Hello! " if is_greeting else ""
+
             voice_ans = (
-                f"HospiOne operations are nominal. Today you have {m.get('pending_tasks', 12)} pending tasks, "
+                f"{greeting_voice}HospiOne operations are nominal. Today you have {m.get('pending_tasks', 12)} pending tasks, "
                 f"{m.get('calls_today', 8)} department calls completed, {m.get('inventory_requests', 5)} open inventory requests, "
                 f"{m.get('followups_due', 17)} administrative follow-ups due, and 3 out of 4 AI devices connected."
             )
 
             self.status = "COMPLETED"
+            yield self._create_event("TASK_COMPLETED", {
+                "summary": f"{greeting_voice}HospiOne operational summary compiled.",
+                "voice_text": voice_ans
+            })
             yield self._create_event("model.message.delta", {
                 "content": ans,
                 "voice_text": voice_ans
             })
             yield self._create_event("turn.done", {
-                "state": {"status": "done", "output": {"content": ans}}
+                "state": {"status": "done", "output": {"content": ans, "voice_text": voice_ans}}
             }, thread_id=None)
             return
 
