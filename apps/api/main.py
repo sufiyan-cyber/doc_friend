@@ -1247,7 +1247,6 @@ EDGE_NEURAL_VOICES = {
 }
 
 async def synthesize_tts_bytes(text: str, lang: str = "auto", prefer_edge_for_prewarm: bool = False):
-    import edge_tts
     import io
 
     clean_text = (text or "").strip()[:600]
@@ -1310,18 +1309,23 @@ async def synthesize_tts_bytes(text: str, lang: str = "auto", prefer_edge_for_pr
                 print(f"[Sarvam TTS] Fallback notice ({target_lang}): {e}")
 
         # 2. Automatic Credit-Exhaustion Fallback: Microsoft Edge Neural TTS (Supports en-IN, hi-IN, kn-IN with 0 credits)
-        voice_name = EDGE_NEURAL_VOICES.get(target_lang, "en-IN-NeerjaNeural")
-        communicate = edge_tts.Communicate(clean_text, voice_name, rate="+8%", pitch="+0Hz")
-        audio_buffer = io.BytesIO()
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                audio_buffer.write(chunk["data"])
+        try:
+            import edge_tts
+            voice_name = EDGE_NEURAL_VOICES.get(target_lang, "en-IN-NeerjaNeural")
+            communicate = edge_tts.Communicate(clean_text, voice_name, rate="+8%", pitch="+0Hz")
+            audio_buffer = io.BytesIO()
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    audio_buffer.write(chunk["data"])
 
-        data = audio_buffer.getvalue()
-        if data:
-            res_tuple = (data, "audio/mpeg")
-            TTS_AUDIO_CACHE[cache_key] = res_tuple
-            return res_tuple
+            data = audio_buffer.getvalue()
+            if data:
+                res_tuple = (data, "audio/mpeg")
+                TTS_AUDIO_CACHE[cache_key] = res_tuple
+                return res_tuple
+        except Exception as e:
+            print(f"[Edge TTS Notice]: {e}")
+
         return b"", "audio/mpeg"
 
 async def prewarm_tts(text: str, lang: str = "en-IN", prefer_edge: bool = False):
@@ -1366,7 +1370,7 @@ async def text_to_speech_audio(text: str = "Hello", lang: str = "auto"):
         res = await synthesize_tts_bytes(clean_text, lang=lang)
         audio_bytes, media_type = res if isinstance(res, tuple) else (res, "audio/mpeg")
         if not audio_bytes:
-            return JSONResponse({"error": "empty audio"}, status_code=500)
+            return Response(status_code=204)
         return Response(
             content=audio_bytes,
             media_type=media_type,
@@ -1376,8 +1380,8 @@ async def text_to_speech_audio(text: str = "Hello", lang: str = "auto"):
             }
         )
     except Exception as e:
-        print(f"[TTS] Error: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        print(f"[TTS] Notice: {e}")
+        return Response(status_code=204)
 
 
 # ==============================================================================

@@ -8,3 +8,4 @@ trueforge-sdk>=0.2.0
 mcp>=1.2.0
 cognee>=1.2.0
 python-multipart>=0.0.9
+edge-tts>=6.1.12
