@@ -12,6 +12,8 @@ ENV/
 # Secrets & Environment
 .env
 *.env.local
+env.yaml
+
 
 # Databases & Runtime State
 data/
